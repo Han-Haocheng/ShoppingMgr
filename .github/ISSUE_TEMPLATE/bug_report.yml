@@ -1,0 +1,79 @@
+name: 缺陷
+description: 报告一个可复现的功能异常或错误行为
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。提交前请先搜索现有 issue，避免重复。
+
+        请把命令、报错与关键输出直接贴在下面（不要只贴截图），并说明能否在 main 最新提交上复现。
+  - type: input
+    id: version
+    attributes:
+      label: 提交版本
+      description: 出问题时的 commit 短哈希（git rev-parse --short HEAD）或发布标签
+      placeholder: 例：98dc2cd
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响模块
+      description: 问题主要出现在哪个模块
+      options:
+        - 品类 categories
+        - 商品 products
+        - 购物清单 lists
+        - 消费记录 expenses
+        - 主页 / 汇总
+        - 数据库 / 迁移 / init-db
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 按 1/2/3 列出最小复现路径，能贴命令就贴命令
+      placeholder: |
+        1. .venv/bin/flask --app run:app init-db
+        2. .venv/bin/python run.py
+        3. 打开 /categories/new 提交空名称
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 按 SPEC.md 应当发生什么
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 贴完整报错栈或错误页面文字
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 运行环境
+      description: 操作系统、Python 版本、浏览器
+      placeholder: 例：Arch Linux / Python 3.14.10 / Firefox 160
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 已确认在 main 最新提交上仍可复现
+          required: true
+        - label: 已搜索现有 issue，没有重复
+          required: true
+        - label: 已阅读 CONTRIBUTING.md 的提交与 PR 规则
+          required: true

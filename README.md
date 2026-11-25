@@ -1,5 +1,7 @@
 # ShoppingMgr（购物管家）
 
+[![CI](https://github.com/Han-Haocheng/ShoppingMgr/actions/workflows/ci.yml/badge.svg)](https://github.com/Han-Haocheng/ShoppingMgr/actions/workflows/ci.yml)
+
 买菜/囤货场景的单用户记账 + 购物清单小工具。Flask 服务端渲染，中文界面，数据落在本地
 SQLite。后端按 `SPEC.md` 实现；SPEC 是唯一权威契约，本文件只描述怎么跑。
 
@@ -112,3 +114,16 @@ ShoppingMgr/
 
 `POST /items/<iid>/delete` 需要知道「来源清单列表或详情」。表单可带隐藏域
 `back`，取值 `list`（回 `/lists`）或 `detail`/留空（回该条目所属清单详情）。缺省回详情。
+
+## 协作方式
+
+协作规则见 [CONTRIBUTING.md](CONTRIBUTING.md)：本仓库用 issue + PR 推进，`main` 只接受经 CI 通过的 PR 合入。
+
+- issue 先行：缺陷 / 功能建议 / 任务三种模板，写清目标与验收标准；没有 issue 不开 PR。
+- 分支：`feat/…`、`fix/…`、`chore/…`、`docs/…`，禁止直接在 `main` 上改动。
+- 提交：Conventional Commits（`feat` / `fix` / `docs` / `refactor` / `test` / `chore` 前缀必填），一次提交只做一件事。
+- PR：一 issue 一 PR，正文首行 `Closes #N`，合并方式 squash，合并后自动删除分支。
+- 门禁：CI 的 `test` 检查（`.github/workflows/ci.yml`）必须为绿色；第二位协作者加入后由 Lead 开启「至少 1 人批准」，当前批准数为 0。
+- 不提交 `instance/`、`.venv/`、`.env`、`__pycache__`；契约改动先改 `SPEC.md` 再改代码。
+
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
