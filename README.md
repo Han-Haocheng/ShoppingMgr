@@ -2,238 +2,46 @@
 
 [![CI](https://github.com/Han-Haocheng/ShoppingMgr/actions/workflows/ci.yml/badge.svg)](https://github.com/Han-Haocheng/ShoppingMgr/actions/workflows/ci.yml)
 
-买菜/囤货场景的单用户记账 + 购物清单小工具。Flask 服务端渲染，中文界面，数据落在本地
-SQLite。后端按 `SPEC.md` 实现；SPEC 是唯一权威契约，本文件只描述怎么跑。
+单用户本地记账 + 购物清单小工具：Flask 3.1 服务端渲染、中文界面、数据落在本地 SQLite。产品契约以 [SPEC.md](SPEC.md) 为唯一准绳，本文件只回答「这是什么」与「怎么开始」。
 
-## 快速开始（六步）
+## 功能要点
 
-```bash
-# 1. 建虚拟环境（Python 3.14）
-python3 -m venv .venv
-source .venv/bin/activate
+- **用户与登录**：注册 / 登录 / 登出，会话 7 天，登录失败有内存限流。
+- **数据归属**：所有业务数据挂在登录用户名下，跨用户访问一律按不存在处理（404）。
+- **品类与商品**：增删改查；品类名同用户内唯一，商品带单位、单价、可选条码。
+- **购物清单**：清单与条目增删、勾选完成、合计金额；金额一律 `Decimal` 两位小数。
+- **消费记录**：按月汇总与筛选，日期 `YYYY-MM-DD`、金额 `¥` 两位小数。
+- **技术形态**：Jinja2 模板 + Bootstrap 5.3（本地 vendor，无 CDN），无前端框架、无 JSON API。
 
-# 2. 安装依赖
-pip install -r requirements.txt
-pip install -r requirements-dev.txt      # 只跑测试才需要（pytest）
-
-# 3. 配置 .env（至少要填 SECRET_KEY，否则下面的命令会直接报「未设置 SECRET_KEY」）
-cp .env.example .env
-python -c "import secrets;print(secrets.token_hex(32))"   # 把输出的 64 位十六进制填进 .env 的 SECRET_KEY=
-# 不想现在配密钥也行：export FLASK_DEBUG=1，将退回固定开发密钥并打一条警告
-
-# 4. 建库并写入示例数据（5 品类 / 8 商品 / 1 草稿清单 3 条目 / 6 笔本月消费）
-flask --app run:app init-db
-
-# 5. 启动开发服务器（会自动读取项目根目录的 .env）
-python run.py                            # http://127.0.0.1:5000
-
-# 6. 跑测试
-python -m pytest -q
-```
-
-说明：
-
-- 数据库文件为 `instance/shop.db`（`instance/` 已被 `.gitignore` 忽略），首次访问前先执行
-  `init-db`。
-- CLI 命令：
-  - `init-db`：`drop_all + create_all + 写入示例数据`（**会清空现有数据**），示例数据归属 `demo` 账号。
-  - `seed-db`：只写入示例数据，不动表结构；`demo` 名下已有数据时跳过。
-  - `init-admin`：`--username X --password Y [--display-name Z]` 建账号，迁移前准备归属用户用。
-- 端口/主机可用环境变量覆盖：`HOST`、`PORT`；`FLASK_DEBUG=0` 关闭调试重载。
-- 数据库地址可用 `DATABASE_URL` 覆盖（默认 `sqlite:///shop.db`，相对 Flask 的
-  `instance_path`）。
-
-## 首次使用
-
-v2 起有用户与登录，**所有业务数据都归属到具体用户**，所以顺序永远是「先有账号，再灌数据」。
-
-### 本地演示
+## 30 秒上手
 
 ```bash
-flask --app run:app init-db          # 重建表 + 建 demo 账号 + 灌示例数据
-python run.py                        # 打开 http://127.0.0.1:5000，用 demo / demo1234 登录
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt      # 1. 环境与依赖（Python 3.14）
+cp .env.example .env                                                    # 2. 至少填 SECRET_KEY（生成命令在 .env.example 注释里）
+.venv/bin/flask --app run:app init-db && .venv/bin/python run.py         # 3. 建库+示例数据，起服务 http://127.0.0.1:5000
 ```
 
-`init-db` 会先确保 `demo` 账号存在（用户名 `demo`、密码 `demo1234`、显示名「演示用户」），
-再把示例数据（5 品类 / 8 商品 / 1 草稿清单 3 条目 / 6 笔本月消费）全部挂到它名下。
+第 3 步之后用 `demo` / `demo1234` 登录（仅本地演示，上线前必须删除或改密）。首次一定要先 `init-db`，否则页面会报 `no such table`。
 
-> **demo 账号只用于本地演示，上线前必须删除或改密**（`demo1234` 是写进仓库的公开密码）。
-> 改密：登录后在账号页自行修改；删除：先清掉该用户的业务数据再删账号，或干脆重建库后
-> 走下面的生产路径。
+三步之外的都在专题文档里：依赖与开发依赖、环境变量全表、CLI 命令、启动与调试、测试命令见 [docs/development.md](docs/development.md)；报错按原文查 [docs/troubleshooting.md](docs/troubleshooting.md)。
 
-### 生产部署 / 升级既有 v1 库
+## 文档地图
 
-```bash
-flask --app run:app init-admin --username 你的账号 --password '至少8位密码' --display-name 显示名
-flask --app run:app db upgrade
-```
+| 文档 | 什么时候该读它 |
+| --- | --- |
+| [docs/README.md](docs/README.md) | 想先看清全部文档的职责边界与权威顺序 |
+| [docs/development.md](docs/development.md) | 第一次配环境、跑命令、跑测试、调试 |
+| [docs/architecture.md](docs/architecture.md) | 要在 `app/` 下加蓝图、模型或模板 |
+| [docs/database.md](docs/database.md) | 建库、灌数据、跑迁移、升级既有 v1 库、备份 |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | 启动 / 迁移 / 登录出错，要按报错原文定位 |
+| [SPEC.md](SPEC.md) | 写代码前确认契约：数据模型（第 3 节）、路由与端点（第 5 节）、模板上下文（第 7 节）、表单字段名（第 8 节） |
+| [AGENTS.md](AGENTS.md) | 动手前读硬约束：禁止项、两条提交流程、被打回情形 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 准备提 issue / PR 时看流程 |
 
-- `init-admin`：建一个账号；同名已存在时报错退出（退出码 1），不会覆盖原密码。
-- `db upgrade`：把 v1 库升到 v2（5 张业务表加 `user_id` 并回填）。**迁移把存量 v1 数据
-  统一归属到 id 最小的用户**，所以升级前必须先建好账号；如果库里有业务数据但 `users` 表
-  为空，迁移会直接失败并提示先跑 `init-admin`，不会留下半成品。
+端点表、模板上下文变量、表单字段名，以及删除清单条目时用来指定来源页的隐藏域参数，均以 [SPEC.md](SPEC.md) 为准：路由见第 5 节、结算语义见第 6 节、模板见第 7 节、表单字段见第 8 节。本文件不再复制这些清单。
 
-### 本地跑 flask 命令要先给 SECRET_KEY
+## 协作与许可
 
-`create_app()` 在非调试模式下要求 `SECRET_KEY`，缺失会直接启动失败。`python run.py` 与
-`flask --app run:app ...` 都依赖同一份配置：只要按「快速开始」第 3 步建好项目根的 `.env`
-（`cp .env.example .env` 并填 `SECRET_KEY`），下面的命令直接就能跑：
-
-```bash
-.venv/bin/flask --app run:app db heads
-.venv/bin/flask --app run:app db upgrade
-```
-
-没有 `.env`（或临时换一台机器）时，两条等价出路任选其一：
-
-```bash
-# 出路一：命令行临时给一个密钥
-SECRET_KEY=dev .venv/bin/flask --app run:app db heads
-# 出路二：开调试模式，用固定的开发密钥（会打一条警告）
-FLASK_DEBUG=1 .venv/bin/flask --app run:app db upgrade
-```
-
-- `.env` 只在**当前工作目录及其上级**里查找，所以请在项目根目录执行命令。
-- `.env` 不会覆盖已经存在的环境变量（不 `override`），shell `export` 与 CI 的变量始终优先。
-
-## 目录说明
-
-```
-ShoppingMgr/
-├── SPEC.md                 规格（唯一权威契约，Lead 维护）
-├── requirements.txt        运行时依赖（Flask / Flask-SQLAlchemy / Flask-Migrate / python-dotenv）
-├── requirements-dev.txt    开发依赖（pytest）
-├── run.py                  入口：导出 app 供 flask 发现，直接运行则起开发服务器
-├── app/
-│   ├── __init__.py         create_app()：配置、db/migrate、5 个蓝图、404、CLI
-│   ├── config.py           Config：SECRET_KEY、SQLALCHEMY_DATABASE_URI
-│   ├── extensions.py       db（SQLAlchemy 2.0 DeclarativeBase）、migrate
-│   ├── models.py           User / Category / Product / ShoppingList / ShoppingItem / Expense（业务表都带 user_id）
-│   ├── utils.py            parse_decimal / parse_date / parse_month / fmt_money / 月份区间 / 示例数据
-│   ├── blueprints/
-│   │   ├── __init__.py     ALL_BLUEPRINTS（无 url_prefix）
-│   │   ├── main.py         GET /                       主页汇总
-│   │   ├── categories.py   品类 CRUD
-│   │   ├── products.py     商品 CRUD（支持 ?category_id= 筛选）
-│   │   ├── lists.py        清单 CRUD + 条目增删勾选
-│   │   └── expenses.py     消费记录 CRUD（支持 ?month=YYYY-MM）
-│   ├── templates/          前端（dev-frontend 域，不在后端改动范围）
-│   └── static/             Bootstrap / 自定义样式（同上）
-├── migrations/             Alembic 迁移（v1 基线 → users → 业务表 user_id）
-├── tests/
-│   ├── conftest.py         app / client / auth_client / second_client 夹具，内存 SQLite
-│   ├── test_smoke.py       冒烟测试（SPEC 第 8 节，走 auth_client）
-│   ├── test_auth.py        注册/登录/登出/限流/next 校验
-│   ├── test_csrf.py        CSRF 拦截与放行
-│   ├── test_migrations.py  init-db 与 db upgrade/downgrade 行为
-│   ├── test_isolation.py   归属隔离：跨用户一律 404、未登录一律 302 /login
-│   └── test_run_env.py     run.py 读 .env：子进程真实启动，含「缺 SECRET_KEY 仍拒绝启动」
-└── instance/shop.db        运行时生成，不提交
-```
-
-## 端点一览
-
-| 方法 | 路径 | endpoint |
-| --- | --- | --- |
-| GET | `/` | `main.index` |
-| GET | `/categories` | `categories.list` |
-| GET,POST | `/categories/new` | `categories.new` |
-| GET,POST | `/categories/<int:cid>/edit` | `categories.edit` |
-| POST | `/categories/<int:cid>/delete` | `categories.delete` |
-| GET | `/products` | `products.list` |
-| GET,POST | `/products/new` | `products.new` |
-| GET,POST | `/products/<int:pid>/edit` | `products.edit` |
-| POST | `/products/<int:pid>/delete` | `products.delete` |
-| GET | `/lists` | `lists.list` |
-| GET,POST | `/lists/new` | `lists.new` |
-| GET | `/lists/<int:lid>` | `lists.detail` |
-| GET,POST | `/lists/<int:lid>/edit` | `lists.edit` |
-| POST | `/lists/<int:lid>/items` | `lists.add_item` |
-| POST | `/lists/<int:lid>/items/<int:iid>/toggle` | `lists.toggle_item` |
-| POST | `/items/<int:iid>/delete` | `lists.delete_item` |
-| POST | `/lists/<int:lid>/done` | `lists.mark_done` |
-| POST | `/lists/<int:lid>/delete` | `lists.delete` |
-| GET | `/expenses` | `expenses.list` |
-| GET,POST | `/expenses/new` | `expenses.new` |
-| GET,POST | `/expenses/<int:eid>/edit` | `expenses.edit` |
-| POST | `/expenses/<int:eid>/delete` | `expenses.delete` |
-
-## 模板上下文（后端已按下表传参）
-
-- `index.html`：`month_total`(Decimal) `month_count`(int) `recent_expenses` `active_lists`
-- `categories/list.html`：`items`（每项带 `product_count`）
-- `categories/form.html`：`obj` `action_url` `submit_label`
-- `products/list.html`：`items` `categories` `current_category_id`
-- `products/form.html`：`obj` `action_url` `submit_label` `categories`
-- `lists/list.html`：`items`（每项带 `item_count` `done_count`）
-- `lists/form.html`：`obj` `action_url` `submit_label`
-- `lists/detail.html`：`obj` `products` `total`
-- `expenses/list.html`：`items` `month` `month_total` `months`
-- `expenses/form.html`：`obj` `action_url` `submit_label` `categories` `products`
-- `404.html`：无额外变量
-
-额外便利：注册了 Jinja 过滤器 `money`，模板里可写 `{{ obj.total|money }}` 得到 `¥12.34`
-（非 SPEC 要求，可选使用）。
-
-## 删除清单条目时的来源页
-
-`POST /items/<iid>/delete` 需要知道「来源清单列表或详情」。表单可带隐藏域
-`back`，取值 `list`（回 `/lists`）或 `detail`/留空（回该条目所属清单详情）。缺省回详情。
-
-## 协作方式
-
-协作规则见 [CONTRIBUTING.md](CONTRIBUTING.md)：本仓库用 issue + PR 推进，`main` 只接受经 CI 通过的 PR 合入。
-fork 成员与 AI 编码代理的硬约束（含无写权限时的 fork 流程）见 [AGENTS.md](AGENTS.md)。
-
-- issue 先行：缺陷 / 功能建议 / 任务三种模板，写清目标与验收标准；没有 issue 不开 PR。
-- 分支：`feat/…`、`fix/…`、`chore/…`、`docs/…`，禁止直接在 `main` 上改动。
-- 提交：Conventional Commits（`feat` / `fix` / `docs` / `refactor` / `test` / `chore` 前缀必填），一次提交只做一件事。
-- PR：一 issue 一 PR，正文首行 `Closes #N`，合并方式 squash，合并后自动删除分支。
-- 门禁：CI 的 `test` 检查（`.github/workflows/ci.yml`）必须为绿色；第二位协作者加入后由 Lead 开启「至少 1 人批准」，当前批准数为 0。
-- 不提交 `instance/`、`.venv/`、`.env`、`__pycache__`；契约改动先改 `SPEC.md` 再改代码。
+协作方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，硬约束见 [AGENTS.md](AGENTS.md)。本项目以 [MIT 协议](LICENSE) 发布，Copyright (c) 2026 Han-Haocheng；提交 PR 即表示你同意以同一协议授权你的贡献。
 
 [![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
-
-## 许可证
-
-本项目以 [MIT 协议](LICENSE) 发布，Copyright (c) 2026 Han-Haocheng。提交 PR 即表示你同意以同一协议授权你的贡献。
-
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
-## 环境变量
-
-| 变量 | 是否必填 | 说明 |
-| --- | --- | --- |
-| `SECRET_KEY` | 生产必填（本地调试可缺省） | 会话签名密钥。未设置且未开启调试时，`create_app()` 直接抛 `RuntimeError`；调试开启时退回固定开发密钥并打一条警告。生成：`python -c "import secrets;print(secrets.token_hex(32))"` |
-| `DATABASE_URL` | 可选 | 数据库连接串，默认 `sqlite:///shop.db`（即项目根下 `instance/shop.db`） |
-| `HOST` | 可选 | `python run.py` 的监听地址，默认 `127.0.0.1`；只在本机使用时不要改成 `0.0.0.0` |
-| `PORT` | 可选 | 监听端口，默认 `5000` |
-| `FLASK_DEBUG` | 可选 | 调试开关，**默认关闭**；只有 `1`/`true`/`yes`（忽略大小写）视为开启，`0`/`false`/`no`/未设置都关闭。生产环境必须保持关闭：Werkzeug 调试器一旦对外可访问就等于任意代码执行 |
-
-模板见 [.env.example](.env.example)，复制后按需修改：
-
-```bash
-cp .env.example .env    # .env 已被 .gitignore 忽略，不要提交
-```
-
-- `python run.py` 与 `flask --app run:app ...` 都会在导入应用前自动加载 `.env`（`python-dotenv`）：从**当前工作目录及其上级**找 `.env`，所以在项目根目录执行最稳。
-- `.env` 不覆盖已存在的环境变量（没有用 `override=True`），shell `export` 与 CI 注入的变量始终优先。
-- 报错文案本身给了两条出路：配置真实密钥，或本地开发时设 `FLASK_DEBUG=1`（会使用固定开发密钥并打警告）。
-
-## 数据库迁移
-
-表结构用 Alembic（Flask-Migrate）管理，脚本在 `migrations/versions/`，基线是 v1 现状的 5 张表。
-日常三条命令：
-
-```bash
-flask --app run:app db upgrade            # 升级到最新版本（已有库/生产库的唯一升级方式）
-flask --app run:app db migrate -m '说明'   # 改完 app/models.py 后生成迁移脚本，人工检查后再提交
-flask --app run:app db current            # 看当前库的版本，应显示 <revision> (head)
-```
-
-- `init-db` 是**开发重置**：drop_all + create_all + 示例数据，并把库 stamp 到 head（**会清空数据**）。
-- 生产环境**只用 `db upgrade`**，不要执行 `init-db`：它重建表，等于清库。
-- 早已存在但还没有 `alembic_version` 表的旧库（baseline 之前建的），先 `flask --app run:app db stamp head`
-  把它标记为基线，再走 `db upgrade`；直接 upgrade 会因为「表已存在」失败。
-
-
