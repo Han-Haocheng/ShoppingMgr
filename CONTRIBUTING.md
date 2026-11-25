@@ -81,3 +81,8 @@ python -m venv .venv
 
 - 新增或升级依赖时，同时更新 `requirements.txt`（开发依赖进 `requirements-dev.txt`）。
 - 在 PR 的「变更说明」里写清引入理由、版本约束与替代方案取舍；没有理由的依赖变更不予合并。
+
+## 11 许可证
+
+本项目以 [MIT 协议](LICENSE) 发布。提交 PR 即表示你同意以 MIT 协议授权你的贡献（inbound = outbound）；
+如需其它授权安排，请先开 issue 说明，不要直接提交。
