@@ -4,17 +4,24 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
+from ..auth import login_required
 from ..extensions import db
 from ..models import Category, Product
-from ..utils import copy_instance, parse_decimal, parse_id
+from ..utils import copy_instance, owned_or_404, parse_decimal, parse_id
 
 bp = Blueprint("products", __name__)
 
 
 def _categories() -> list[Category]:
-    return db.session.query(Category).order_by(Category.name.asc()).all()
+    """下拉框用：只列当前用户的品类。"""
+    return (
+        db.session.query(Category)
+        .filter(Category.user_id == g.user.id)
+        .order_by(Category.name.asc())
+        .all()
+    )
 
 
 def _collect(form) -> tuple[dict, list[str]]:
@@ -31,8 +38,9 @@ def _collect(form) -> tuple[dict, list[str]]:
     if len(unit) > 10:
         errors.append("单位不能超过 10 个字符")
 
-    barcode = form.get("barcode", "").strip()
-    if len(barcode) > 64:
+    # SPEC 第 3 节：条码可空，空输入存 NULL（None），不是空串
+    barcode = form.get("barcode", "").strip() or None
+    if barcode is not None and len(barcode) > 64:
         errors.append("条码不能超过 64 个字符")
 
     note = form.get("note", "").strip()
@@ -50,9 +58,15 @@ def _collect(form) -> tuple[dict, list[str]]:
     except ValueError as exc:
         errors.append(f"品类无效：{exc}")
         category_id = None
-    if category_id is not None and db.session.get(Category, category_id) is None:
-        errors.append("所选品类不存在")
-        category_id = None
+    if category_id is not None:
+        owned = (
+            db.session.query(Category.id)
+            .filter(Category.id == category_id, Category.user_id == g.user.id)
+            .first()
+        )
+        if owned is None:  # 别人的品类等同不存在
+            errors.append("所选品类不存在")
+            category_id = None
 
     is_active = form.get("is_active", "").strip() in {"1", "on", "true", "True"}
     values = {
@@ -68,10 +82,11 @@ def _collect(form) -> tuple[dict, list[str]]:
 
 
 @bp.get("/products")
+@login_required
 def list():
-    """列表页，支持 ?category_id= 筛选。"""
+    """列表页，支持 ?category_id= 筛选（只在本用户范围内筛）。"""
     current_category_id = request.args.get("category_id", type=int)
-    query = db.session.query(Product)
+    query = db.session.query(Product).filter(Product.user_id == g.user.id)
     if current_category_id is not None:
         query = query.filter(Product.category_id == current_category_id)
     items = query.order_by(Product.created_at.asc(), Product.id.asc()).all()
@@ -84,6 +99,7 @@ def list():
 
 
 @bp.route("/products/new", methods=["GET", "POST"])
+@login_required
 def new():
     action_url = url_for("products.new")
     categories = _categories()
@@ -98,7 +114,7 @@ def new():
                 submit_label="新建商品",
                 categories=categories,
             )
-        product = Product(**values)
+        product = Product(user_id=g.user.id, **values)
         db.session.add(product)
         db.session.commit()
         flash(f"商品“{product.name}”已创建。", "success")
@@ -113,8 +129,9 @@ def new():
 
 
 @bp.route("/products/<int:pid>/edit", methods=["GET", "POST"])
+@login_required
 def edit(pid: int):
-    product = db.get_or_404(Product, pid)
+    product = owned_or_404(Product, id=pid)
     action_url = url_for("products.edit", pid=pid)
     categories = _categories()
     if request.method == "POST":
@@ -143,8 +160,9 @@ def edit(pid: int):
 
 
 @bp.post("/products/<int:pid>/delete")
+@login_required
 def delete(pid: int):
-    product = db.get_or_404(Product, pid)
+    product = owned_or_404(Product, id=pid)
     name = product.name
     db.session.delete(product)
     db.session.commit()

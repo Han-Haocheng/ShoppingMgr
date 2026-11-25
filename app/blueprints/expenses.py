@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func
 
+from ..auth import login_required
 from ..extensions import db
 from ..models import Category, Expense, Product
 from ..utils import (
     copy_instance,
     current_month,
     month_range,
+    owned_or_404,
     parse_date,
     parse_decimal,
     parse_id,
@@ -22,23 +24,48 @@ bp = Blueprint("expenses", __name__)
 
 
 def _categories() -> list[Category]:
-    return db.session.query(Category).order_by(Category.name.asc()).all()
+    """下拉框用：只列当前用户的品类。"""
+    return (
+        db.session.query(Category)
+        .filter(Category.user_id == g.user.id)
+        .order_by(Category.name.asc())
+        .all()
+    )
 
 
 def _products() -> list[Product]:
-    return db.session.query(Product).order_by(Product.name.asc()).all()
+    """下拉框用：只列当前用户的商品。"""
+    return (
+        db.session.query(Product)
+        .filter(Product.user_id == g.user.id)
+        .order_by(Product.name.asc())
+        .all()
+    )
 
 
 def _months() -> list[str]:
-    """库内出现过的年月，倒序（形如 2026-11）。"""
+    """本用户库内出现过的年月，倒序（形如 2026-11）。"""
     month_expr = func.strftime("%Y-%m", Expense.spent_on)
     rows = (
         db.session.query(month_expr)
+        .filter(Expense.user_id == g.user.id)
         .distinct()
         .order_by(month_expr.desc())
         .all()
     )
     return [row[0] for row in rows if row[0]]
+
+
+def _owned_id(model, raw_id: int | None) -> bool:
+    """该 id 是否属于当前用户（跨用户一律当作不存在）。"""
+    if raw_id is None:
+        return False
+    return (
+        db.session.query(model.id)
+        .filter(model.id == raw_id, model.user_id == g.user.id)
+        .first()
+        is not None
+    )
 
 
 def _collect(form) -> tuple[dict, list[str]]:
@@ -66,7 +93,7 @@ def _collect(form) -> tuple[dict, list[str]]:
     except ValueError as exc:
         errors.append(f"品类无效：{exc}")
         category_id = None
-    if category_id is not None and db.session.get(Category, category_id) is None:
+    if category_id is not None and not _owned_id(Category, category_id):
         errors.append("所选品类不存在")
         category_id = None
 
@@ -75,7 +102,7 @@ def _collect(form) -> tuple[dict, list[str]]:
     except ValueError as exc:
         errors.append(f"商品无效：{exc}")
         product_id = None
-    if product_id is not None and db.session.get(Product, product_id) is None:
+    if product_id is not None and not _owned_id(Product, product_id):
         errors.append("所选商品不存在")
         product_id = None
 
@@ -94,8 +121,9 @@ def _collect(form) -> tuple[dict, list[str]]:
 
 
 @bp.get("/expenses")
+@login_required
 def list():
-    """列表页，支持 ?month=YYYY-MM，默认当月。"""
+    """列表页，支持 ?month=YYYY-MM，默认当月（只统计当前用户）。"""
     raw_month = request.args.get("month", "")
     try:
         month = parse_month(raw_month)
@@ -106,13 +134,21 @@ def list():
     start, end = month_range(month)
     items = (
         db.session.query(Expense)
-        .filter(Expense.spent_on >= start, Expense.spent_on < end)
+        .filter(
+            Expense.user_id == g.user.id,
+            Expense.spent_on >= start,
+            Expense.spent_on < end,
+        )
         .order_by(Expense.spent_on.desc(), Expense.id.desc())
         .all()
     )
     month_total = (
         db.session.query(func.coalesce(func.sum(Expense.amount), 0))
-        .filter(Expense.spent_on >= start, Expense.spent_on < end)
+        .filter(
+            Expense.user_id == g.user.id,
+            Expense.spent_on >= start,
+            Expense.spent_on < end,
+        )
         .scalar()
     )
     return render_template(
@@ -125,6 +161,7 @@ def list():
 
 
 @bp.route("/expenses/new", methods=["GET", "POST"])
+@login_required
 def new():
     action_url = url_for("expenses.new")
     categories = _categories()
@@ -141,7 +178,7 @@ def new():
                 categories=categories,
                 products=products,
             )
-        expense = Expense(**values)
+        expense = Expense(user_id=g.user.id, **values)
         db.session.add(expense)
         db.session.commit()
         flash(f"已记录 {expense.spent_on} 的消费 {expense.amount} 元。", "success")
@@ -157,8 +194,9 @@ def new():
 
 
 @bp.route("/expenses/<int:eid>/edit", methods=["GET", "POST"])
+@login_required
 def edit(eid: int):
-    expense = db.get_or_404(Expense, eid)
+    expense = owned_or_404(Expense, id=eid)
     action_url = url_for("expenses.edit", eid=eid)
     categories = _categories()
     products = _products()
@@ -190,8 +228,9 @@ def edit(eid: int):
 
 
 @bp.post("/expenses/<int:eid>/delete")
+@login_required
 def delete(eid: int):
-    expense = db.get_or_404(Expense, eid)
+    expense = owned_or_404(Expense, id=eid)
     db.session.delete(expense)
     db.session.commit()
     flash("消费记录已删除。", "success")

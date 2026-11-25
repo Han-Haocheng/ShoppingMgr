@@ -10,9 +10,11 @@ import re
 
 import pytest
 
+from werkzeug.security import generate_password_hash
+
 from app import create_app
 from app.extensions import db as _db
-from app.models import Category
+from app.models import Category, User
 
 
 class CsrfEnabledConfig:
@@ -30,11 +32,18 @@ TOKEN_RE = re.compile(r'name="csrf_token" value="([^"]+)"')
 
 @pytest.fixture()
 def csrf_app():
-    """启用 CSRF 的独立应用（内存库）。"""
+    """启用 CSRF 的独立应用（内存库）。
+
+    注意：**不在 yield 期间持有 app context**。Flask-WTF 把本次请求的 token 缓存在
+    g 上，而请求上下文会复用已存在的 app context；外层一直挂着 app context 会让 g
+    跨请求泄漏，页面上的 token 与 session 里的 token 对不上，看起来像 CSRF 失败。
+    真实运行时不存在这种外层上下文，所以夹具按生产形态来。
+    """
     application = create_app(CsrfEnabledConfig)
     with application.app_context():
         _db.create_all()
-        yield application
+    yield application
+    with application.app_context():
         _db.session.remove()
         _db.drop_all()
 
@@ -87,10 +96,44 @@ def test_tampered_token_is_rejected(csrf_app, csrf_client):
         assert Category.query.filter_by(name="伪造品类").count() == 0
 
 
-def test_post_with_page_token_succeeds(csrf_app, csrf_client):
-    """用页面里解析出的 token 提交则成功：302 且库里有记录。"""
-    token = _page_token(csrf_client)
+CSRF_USERNAME = "csrf-user"
+CSRF_PASSWORD = "csrf-password-1"
 
+
+def _create_user(application) -> int:
+    """造一个用户：业务页 #15 起要登录，走真实链路前先有账号。"""
+    with application.app_context():
+        user = User(
+            username=CSRF_USERNAME,
+            password_hash=generate_password_hash(CSRF_PASSWORD),
+            display_name="CSRF 用户",
+        )
+        _db.session.add(user)
+        _db.session.commit()
+        return user.id
+
+
+def test_post_with_page_token_succeeds(csrf_app, csrf_client):
+    """用页面里解析出的 token 提交则成功：302 且库里有记录。
+
+    #15 起业务页需要登录，所以改走真实链路：登录页取 token → 登录（顺带证明
+    登录表单本身受 CSRF 保护）→ 业务页取 token → 提交创建。
+    """
+    _create_user(csrf_app)
+
+    login_token = _page_token(csrf_client, "/login")
+    signed_in = csrf_client.post(
+        "/login",
+        data={
+            "csrf_token": login_token,
+            "username": CSRF_USERNAME,
+            "password": CSRF_PASSWORD,
+        },
+        follow_redirects=False,
+    )
+    assert signed_in.status_code == 302, f"登录失败：{signed_in.status_code}"
+
+    token = _page_token(csrf_client, "/categories/new")
     response = csrf_client.post(
         "/categories/new",
         data={"csrf_token": token, "name": "合法品类", "note": "带 token"},
@@ -102,6 +145,8 @@ def test_post_with_page_token_succeeds(csrf_app, csrf_client):
     with csrf_app.app_context():
         saved = Category.query.filter_by(name="合法品类").one()
         assert saved.id > 0
+        owner = User.query.filter_by(username=CSRF_USERNAME).one()
+        assert saved.user_id == owner.id  # 顺手验归属：写操作必须落到当前用户
 
 
 def test_cross_site_referrer_falls_back_to_index(csrf_app, csrf_client):

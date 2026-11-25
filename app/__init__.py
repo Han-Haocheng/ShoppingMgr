@@ -106,6 +106,12 @@ def _register_cli(app: Flask) -> None:
         # 否则后续 flask db upgrade 会重放 baseline 并在「表已存在」上失败。
         stamp()
         stats = seed_sample_data()
+        # 种子数据归属 demo 用户（SPEC 第 10 节）：账号只用于本地演示，上线前必须删除或改密
+        click.echo(
+            "演示账号：{username} / demo1234（仅本地演示用，上线前必须删除或改密）".format(
+                **stats
+            )
+        )
         if stats["created"]:
             click.echo(
                 "数据库已重建：品类 {categories} / 商品 {products} / 清单 {lists} "
@@ -113,6 +119,46 @@ def _register_cli(app: Flask) -> None:
             )
         else:
             click.echo("数据库已重建（示例数据已存在，未重复写入）。")
+
+    @app.cli.command("init-admin")
+    @click.option("--username", required=True, help="登录名（唯一，最长 60 字符）")
+    @click.option("--password", required=True, help="初始密码（至少 8 位，不能与用户名相同）")
+    @click.option("--display-name", default="", help="显示名称（可选，默认空）")
+    def init_admin_command(username: str, password: str, display_name: str) -> None:
+        """创建账号（给迁移准备归属用户用）；同名已存在时报错退出。"""
+        from .models import User
+
+        name = (username or "").strip()
+        display = (display_name or "").strip()
+        # 与注册同一套规则（SPEC 第 4 节），避免 CLI 造出注册流程拒绝的账号
+        if not name:
+            click.echo("用户名不能为空。", err=True)
+            raise SystemExit(1)
+        if len(name) > 60:
+            click.echo("用户名最长 60 个字符。", err=True)
+            raise SystemExit(1)
+        if len(display) > 60:
+            click.echo("显示名称最长 60 个字符。", err=True)
+            raise SystemExit(1)
+        if len(password) < 8:
+            click.echo("密码至少 8 位。", err=True)
+            raise SystemExit(1)
+        if password == name:
+            click.echo("密码不能与用户名相同。", err=True)
+            raise SystemExit(1)
+
+        existing = db.session.query(User).filter_by(username=name).first()
+        if existing is not None:
+            click.echo(
+                f"用户“{name}”已存在（id={existing.id}），未做改动。", err=True
+            )
+            raise SystemExit(1)
+
+        user = User(username=name, display_name=display)
+        user.set_password(password)  # 只存哈希，原始密码不落库、不写日志
+        db.session.add(user)
+        db.session.commit()
+        click.echo(f"已创建用户“{name}”（id={user.id}）。")
 
     @app.cli.command("seed-db")
     def seed_db_command() -> None:

@@ -16,6 +16,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 pip install -r requirements-dev.txt      # 只跑测试才需要（pytest）
 
+export FLASK_DEBUG=1
 # 3. 建库并写入示例数据（5 品类 / 8 商品 / 1 草稿清单 3 条目 / 6 笔本月消费）
 flask --app run:app init-db
 
@@ -31,11 +32,53 @@ python -m pytest -q
 - 数据库文件为 `instance/shop.db`（`instance/` 已被 `.gitignore` 忽略），首次访问前先执行
   `init-db`。
 - CLI 命令：
-  - `init-db`：`drop_all + create_all + 写入示例数据`（**会清空现有数据**）。
-  - `seed-db`：只写入示例数据，不动表结构；库里已有数据时跳过。
+  - `init-db`：`drop_all + create_all + 写入示例数据`（**会清空现有数据**），示例数据归属 `demo` 账号。
+  - `seed-db`：只写入示例数据，不动表结构；`demo` 名下已有数据时跳过。
+  - `init-admin`：`--username X --password Y [--display-name Z]` 建账号，迁移前准备归属用户用。
 - 端口/主机可用环境变量覆盖：`HOST`、`PORT`；`FLASK_DEBUG=0` 关闭调试重载。
 - 数据库地址可用 `DATABASE_URL` 覆盖（默认 `sqlite:///shop.db`，相对 Flask 的
   `instance_path`）。
+
+## 首次使用
+
+v2 起有用户与登录，**所有业务数据都归属到具体用户**，所以顺序永远是「先有账号，再灌数据」。
+
+### 本地演示
+
+```bash
+flask --app run:app init-db          # 重建表 + 建 demo 账号 + 灌示例数据
+python run.py                        # 打开 http://127.0.0.1:5000，用 demo / demo1234 登录
+```
+
+`init-db` 会先确保 `demo` 账号存在（用户名 `demo`、密码 `demo1234`、显示名「演示用户」），
+再把示例数据（5 品类 / 8 商品 / 1 草稿清单 3 条目 / 6 笔本月消费）全部挂到它名下。
+
+> **demo 账号只用于本地演示，上线前必须删除或改密**（`demo1234` 是写进仓库的公开密码）。
+> 改密：登录后在账号页自行修改；删除：先清掉该用户的业务数据再删账号，或干脆重建库后
+> 走下面的生产路径。
+
+### 生产部署 / 升级既有 v1 库
+
+```bash
+flask --app run:app init-admin --username 你的账号 --password '至少8位密码' --display-name 显示名
+flask --app run:app db upgrade
+```
+
+- `init-admin`：建一个账号；同名已存在时报错退出（退出码 1），不会覆盖原密码。
+- `db upgrade`：把 v1 库升到 v2（5 张业务表加 `user_id` 并回填）。**迁移把存量 v1 数据
+  统一归属到 id 最小的用户**，所以升级前必须先建好账号；如果库里有业务数据但 `users` 表
+  为空，迁移会直接失败并提示先跑 `init-admin`，不会留下半成品。
+
+### 本地跑 flask 命令要先给 SECRET_KEY
+
+`create_app()` 在非调试模式下要求 `SECRET_KEY`，缺失会直接启动失败。本地临时执行
+CLI（如 `db heads` / `db upgrade`）时：
+
+```bash
+SECRET_KEY=dev .venv/bin/flask --app run:app db heads
+# 或者开调试模式：会自动生成仅限本地的开发用 key
+FLASK_DEBUG=1 .venv/bin/flask --app run:app db upgrade
+```
 
 ## 目录说明
 
@@ -49,7 +92,7 @@ ShoppingMgr/
 │   ├── __init__.py         create_app()：配置、db/migrate、5 个蓝图、404、CLI
 │   ├── config.py           Config：SECRET_KEY、SQLALCHEMY_DATABASE_URI
 │   ├── extensions.py       db（SQLAlchemy 2.0 DeclarativeBase）、migrate
-│   ├── models.py           Category / Product / ShoppingList / ShoppingItem / Expense
+│   ├── models.py           User / Category / Product / ShoppingList / ShoppingItem / Expense（业务表都带 user_id）
 │   ├── utils.py            parse_decimal / parse_date / parse_month / fmt_money / 月份区间 / 示例数据
 │   ├── blueprints/
 │   │   ├── __init__.py     ALL_BLUEPRINTS（无 url_prefix）
@@ -60,9 +103,14 @@ ShoppingMgr/
 │   │   └── expenses.py     消费记录 CRUD（支持 ?month=YYYY-MM）
 │   ├── templates/          前端（dev-frontend 域，不在后端改动范围）
 │   └── static/             Bootstrap / 自定义样式（同上）
+├── migrations/             Alembic 迁移（v1 基线 → users → 业务表 user_id）
 ├── tests/
-│   ├── conftest.py         app / client 夹具，内存 SQLite
-│   └── test_smoke.py       冒烟测试（SPEC 第 8 节）
+│   ├── conftest.py         app / client / auth_client / second_client 夹具，内存 SQLite
+│   ├── test_smoke.py       冒烟测试（SPEC 第 8 节，走 auth_client）
+│   ├── test_auth.py        注册/登录/登出/限流/next 校验
+│   ├── test_csrf.py        CSRF 拦截与放行
+│   ├── test_migrations.py  init-db 与 db upgrade/downgrade 行为
+│   └── test_isolation.py   归属隔离：跨用户一律 404、未登录一律 302 /login
 └── instance/shop.db        运行时生成，不提交
 ```
 

@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 from sqlalchemy import func, update
 
+from ..auth import login_required
 from ..extensions import db
 from ..models import Category, Expense, Product
-from ..utils import copy_instance
+from ..utils import copy_instance, owned_or_404
 
 bp = Blueprint("categories", __name__)
 
 
 def _validate(name: str, note: str, exclude_id: int | None = None) -> list[str]:
-    """返回错误列表；空列表表示通过。"""
+    """返回错误列表；空列表表示通过。名称唯一性只在本用户内判定。"""
     errors: list[str] = []
     if not name:
         errors.append("品类名称不能为空")
@@ -22,7 +23,9 @@ def _validate(name: str, note: str, exclude_id: int | None = None) -> list[str]:
     if len(note) > 200:
         errors.append("备注不能超过 200 个字符")
     if not errors:
-        query = db.session.query(Category.id).filter(Category.name == name)
+        query = db.session.query(Category.id).filter(
+            Category.user_id == g.user.id, Category.name == name
+        )
         if exclude_id is not None:
             query = query.filter(Category.id != exclude_id)
         if query.first() is not None:
@@ -31,11 +34,13 @@ def _validate(name: str, note: str, exclude_id: int | None = None) -> list[str]:
 
 
 @bp.get("/categories")
+@login_required
 def list():
     """列表页；product_count 用一次 outer join + group_by 聚合，避免 N+1。"""
     rows = (
         db.session.query(Category, func.count(Product.id))
         .outerjoin(Product, Product.category_id == Category.id)
+        .filter(Category.user_id == g.user.id)
         .group_by(Category.id)
         .order_by(Category.created_at.asc(), Category.id.asc())
         .all()
@@ -48,6 +53,7 @@ def list():
 
 
 @bp.route("/categories/new", methods=["GET", "POST"])
+@login_required
 def new():
     action_url = url_for("categories.new")
     if request.method == "POST":
@@ -62,7 +68,7 @@ def new():
                 action_url=action_url,
                 submit_label="新建品类",
             )
-        category = Category(name=name, note=note)
+        category = Category(name=name, note=note, user_id=g.user.id)
         db.session.add(category)
         db.session.commit()
         flash(f"品类“{name}”已创建。", "success")
@@ -76,8 +82,9 @@ def new():
 
 
 @bp.route("/categories/<int:cid>/edit", methods=["GET", "POST"])
+@login_required
 def edit(cid: int):
-    category = db.get_or_404(Category, cid)
+    category = owned_or_404(Category, id=cid)
     action_url = url_for("categories.edit", cid=cid)
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -105,14 +112,19 @@ def edit(cid: int):
 
 
 @bp.post("/categories/<int:cid>/delete")
+@login_required
 def delete(cid: int):
-    category = db.get_or_404(Category, cid)
-    # 关联可空外键：删除前先置空，避免留下悬空引用
+    category = owned_or_404(Category, id=cid)
+    # 关联可空外键：删除前先置空，避免留下悬空引用（只动本用户的行）
     db.session.execute(
-        update(Product).where(Product.category_id == cid).values(category_id=None)
+        update(Product)
+        .where(Product.category_id == cid, Product.user_id == g.user.id)
+        .values(category_id=None)
     )
     db.session.execute(
-        update(Expense).where(Expense.category_id == cid).values(category_id=None)
+        update(Expense)
+        .where(Expense.category_id == cid, Expense.user_id == g.user.id)
+        .values(category_id=None)
     )
     db.session.delete(category)
     db.session.commit()
