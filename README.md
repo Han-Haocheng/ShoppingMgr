@@ -118,6 +118,7 @@ ShoppingMgr/
 ## 协作方式
 
 协作规则见 [CONTRIBUTING.md](CONTRIBUTING.md)：本仓库用 issue + PR 推进，`main` 只接受经 CI 通过的 PR 合入。
+fork 成员与 AI 编码代理的硬约束（含无写权限时的 fork 流程）见 [AGENTS.md](AGENTS.md)。
 
 - issue 先行：缺陷 / 功能建议 / 任务三种模板，写清目标与验收标准；没有 issue 不开 PR。
 - 分支：`feat/…`、`fix/…`、`chore/…`、`docs/…`，禁止直接在 `main` 上改动。

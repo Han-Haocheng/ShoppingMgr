@@ -2,12 +2,14 @@
 
 本文件是本仓库的协作规则：分支、提交、PR 与门禁都以这里为准。流程细节与接口契约以 [SPEC.md](SPEC.md) 为唯一权威。
 
+给 fork 成员与 AI 编码代理看的硬约束（禁止项、两条提交流程、被打回情形）集中在 [AGENTS.md](AGENTS.md)，动手前请先读。
+
 ## 1 仓库与技术栈速览
 
 - 项目：ShoppingMgr（购物管家），单用户本地记账 + 购物清单小工具，服务端渲染、中文界面。
 - 技术栈：Python 3.14 + venv（`.venv`）；Flask 3.1.x；Flask-SQLAlchemy 3.1.x；Flask-Migrate 4.x；python-dotenv；SQLite（`instance/shop.db`）；pytest（开发依赖）。
 - 结构：`run.py` 入口导出 `app`；`app/` 内 `models.py`、`utils.py`、`blueprints/`（main / categories / products / lists / expenses）、`templates/`、`static/`；测试在 `tests/`。
-- 权威顺序：`SPEC.md`（契约）＞ 本文件（流程）＞ 代码注释。
+- 权威顺序：`SPEC.md`（契约）＞ [AGENTS.md](AGENTS.md)（硬约束，人机共读）＞ 本文件（流程）＞ 代码注释。
 
 ## 2 本地开发五步
 
