@@ -52,6 +52,7 @@
         <td class="text-end text-nowrap">
           <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('expenses.edit', eid=e.id) }}">编辑</a>
           <form class="d-inline" method="post" action="{{ url_for('expenses.delete', eid=e.id) }}" onsubmit="return confirm('确认删除该条消费记录？');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-outline-danger">删除</button>
           </form>
         </td>

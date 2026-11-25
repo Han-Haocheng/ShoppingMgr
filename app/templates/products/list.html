@@ -52,6 +52,7 @@
         <td class="text-end text-nowrap">
           <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('products.edit', pid=p.id) }}">编辑</a>
           <form class="d-inline" method="post" action="{{ url_for('products.delete', pid=p.id) }}" onsubmit="return confirm('确认删除该商品？清单中的历史条目不受影响。');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-outline-danger">删除</button>
           </form>
         </td>

@@ -134,3 +134,24 @@ fork 成员与 AI 编码代理的硬约束（含无写权限时的 fork 流程�
 本项目以 [MIT 协议](LICENSE) 发布，Copyright (c) 2026 Han-Haocheng。提交 PR 即表示你同意以同一协议授权你的贡献。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+## 环境变量
+
+| 变量 | 是否必填 | 说明 |
+| --- | --- | --- |
+| `SECRET_KEY` | 生产必填（本地调试可缺省） | 会话签名密钥。未设置且未开启调试时，`create_app()` 直接抛 `RuntimeError`；调试开启时退回固定开发密钥并打一条警告。生成：`python -c "import secrets;print(secrets.token_hex(32))"` |
+| `DATABASE_URL` | 可选 | 数据库连接串，默认 `sqlite:///shop.db`（即项目根下 `instance/shop.db`） |
+| `HOST` | 可选 | `python run.py` 的监听地址，默认 `127.0.0.1`；只在本机使用时不要改成 `0.0.0.0` |
+| `PORT` | 可选 | 监听端口，默认 `5000` |
+| `FLASK_DEBUG` | 可选 | 调试开关，**默认关闭**；只有 `1`/`true`/`yes`（忽略大小写）视为开启，`0`/`false`/`no`/未设置都关闭。生产环境必须保持关闭：Werkzeug 调试器一旦对外可访问就等于任意代码执行 |
+
+模板见 [.env.example](.env.example)，复制后按需修改：
+
+```bash
+cp .env.example .env    # .env 已被 .gitignore 忽略，不要提交
+```
+
+- `flask --app run:app run` 与 `flask --app run:app init-db` 会自动加载项目根目录的 `.env`（依赖 `python-dotenv`），因此建库前也需先有 `SECRET_KEY` 或设 `FLASK_DEBUG=1`。
+- 直接 `python run.py` 不读 `.env`，请先 `export SECRET_KEY=...` 或 source 该文件。
+- 报错文案本身给了两条出路：配置真实密钥，或本地开发时设 `FLASK_DEBUG=1`（会使用固定开发密钥并打警告）。
+

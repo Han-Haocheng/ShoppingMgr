@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import urlsplit
 
 import click
-from flask import Flask, render_template
+from flask import Flask, flash, redirect, render_template, request, url_for
+from flask_wtf.csrf import CSRFError
 
-from .config import Config
-from .extensions import db, migrate
+from .config import (
+    DEV_SECRET_KEY_WARNING,
+    Config,
+    debug_enabled_by_env,
+    resolve_secret_key,
+)
+from .extensions import csrf, db, migrate
 from .utils import fmt_money
 
 
@@ -23,11 +30,22 @@ def create_app(config_object=None) -> Flask:
         else:
             app.config.from_object(config_object)
 
+    # SECRET_KEY 必填校验：debug 关闭且没配置就直接失败（此时还没建目录、没连库）。
+    # Config.SECRET_KEY 是 import 期的环境快照，这里再读一次环境变量兜住「import 之后才设置」的场景。
+    secret_key, used_dev_secret_key = resolve_secret_key(
+        app.config.get("SECRET_KEY") or os.environ.get("SECRET_KEY"),
+        debug=debug_enabled_by_env() or bool(app.config.get("DEBUG")),
+    )
+    app.config["SECRET_KEY"] = secret_key
+    if used_dev_secret_key:
+        app.logger.warning(DEV_SECRET_KEY_WARNING)
+
     # instance/shop.db 的父目录（.gitignore 已忽略 instance/）
     os.makedirs(app.instance_path, exist_ok=True)
 
     db.init_app(app)
     migrate.init_app(app, db)
+    csrf.init_app(app)
 
     from . import models  # noqa: F401  先注册模型，create_all 才能见全表
     from .blueprints import ALL_BLUEPRINTS
@@ -43,10 +61,30 @@ def create_app(config_object=None) -> Flask:
     return app
 
 
+def _safe_redirect_target() -> str:
+    """CSRF 失败后的跳转目标：只有同源 referrer 才回跳，其余一律回首页。
+
+    同源判定：urllib.parse.urlsplit 解析 request.referrer，scheme 属于 http/https
+    且 netloc 与 request.host 完全相等；外域、相对路径、非 http(s) 都回首页。
+    """
+    referrer = request.referrer
+    if referrer:
+        parts = urlsplit(referrer)
+        if parts.scheme in ("http", "https") and parts.netloc == request.host:
+            return referrer
+    return url_for("main.index")
+
+
 def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(404)
     def not_found(error):  # pragma: no cover - 由前端模板承载
         return render_template("404.html"), 404
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(error):
+        """CSRF 校验失败：提示后回到同源来源页（无来源或跨源回首页）；只 flash+redirect，不再触发 CSRF。"""
+        flash("表单已过期，请刷新页面重试", "danger")
+        return redirect(_safe_redirect_target())
 
 
 def _register_cli(app: Flask) -> None:

@@ -5,11 +5,11 @@
 ## 0 目标与非目标
 
 MVP 四块：品类、商品、购物清单、消费记录。服务端渲染、单用户本地使用、中文界面。
-本期不做：登录鉴权、多用户、CSRF、前端框架、图表看板、JSON API、国际化。
+本期不做：登录鉴权、多用户、前端框架、图表看板、JSON API、国际化。
 
 ## 1 技术栈
 
-Python 3.14 + venv(.venv)；Flask 3.1.x；Flask-SQLAlchemy 3.1.x；Flask-Migrate 4.x；python-dotenv；pytest(dev)。数据库 SQLite：instance/shop.db。
+Python 3.14 + venv(.venv)；Flask 3.1.x；Flask-SQLAlchemy 3.1.x；Flask-Migrate 4.x；Flask-WTF 1.2.x（CSRFProtect）；python-dotenv；pytest(dev)。数据库 SQLite：instance/shop.db。
 依赖清单由 Lead 维护（requirements.txt / requirements-dev.txt）。实施者不安装依赖、不创建 venv、不执行 git。
 
 ## 2 文件所有权
@@ -86,6 +86,7 @@ errorhandler(404) 渲染 404.html（HTTP 404）。
 - 加清单条目：product_id、name、qty、unit_price
 - 消费记录：spent_on（date，YYYY-MM-DD）、amount、category_id、product_id、note
 后端取值用 request.form.get(...,'').strip()，金额/数量解析失败（含负数、非数字）走校验失败分支。
+所有 POST 表单由 Flask-WTF 的 CSRFProtect 校验，必须带 csrf_token 隐藏域；缺失或过期时 flash danger 并重定向回原页。
 
 ## 7 静态资源
 
