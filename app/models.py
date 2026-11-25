@@ -7,6 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import Date, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from .extensions import db
 
@@ -25,6 +26,38 @@ def _money(value) -> Decimal:
     if not isinstance(value, Decimal):
         value = Decimal(str(value))
     return value.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+
+
+class User(db.Model):
+    """用户（SPEC 第 3、4 节）：密码只存 werkzeug 哈希，原始密码不落库。"""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(60), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(60), nullable=False, default="")
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_now)
+
+    def set_password(self, raw_password: str) -> None:
+        """写入密码哈希（werkzeug.security，随 Flask 安装，不引入新依赖）。"""
+        self.password_hash = generate_password_hash(raw_password)
+
+    def check_password(self, raw_password: str) -> bool:
+        """校验原始密码；哈希串本身不匹配时返回 False，不抛异常。"""
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, raw_password)
+
+    @property
+    def display(self) -> str:
+        """导航栏展示名：优先昵称，缺省回落到用户名。"""
+        return self.display_name or self.username
+
+    def __repr__(self) -> str:  # pragma: no cover - 调试用
+        return f"<User id={self.id} username={self.username!r} active={self.is_active}>"
 
 
 class Category(db.Model):

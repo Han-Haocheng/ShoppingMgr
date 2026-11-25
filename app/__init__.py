@@ -48,10 +48,15 @@ def create_app(config_object=None) -> Flask:
     csrf.init_app(app)
 
     from . import models  # noqa: F401  先注册模型，create_all 才能见全表
+    from .auth import load_logged_in_user
     from .blueprints import ALL_BLUEPRINTS
 
     for blueprint in ALL_BLUEPRINTS:
         app.register_blueprint(blueprint)
+
+    # 每个请求先把 session['user_id'] 解析成 g.user（未登录为 None），
+    # 模板与视图统一从 g.user 取当前用户（SPEC 第 4 节）。
+    app.before_request(load_logged_in_user)
 
     _register_error_handlers(app)
     _register_cli(app)

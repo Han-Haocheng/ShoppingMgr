@@ -40,7 +40,7 @@ PurchaseItem（表名 purchase_items，购买明细）: id | user_id | purchase_
 ## 4 用户与登录（app/auth.py + blueprints/auth.py）
 
 - 会话：登录成功写 `session['user_id']` 并 `session.permanent = True`；`PERMANENT_SESSION_LIFETIME = 7 天`；`SESSION_COOKIE_SAMESITE='Lax'`；`SESSION_COOKIE_SECURE` 由环境变量 `SESSION_COOKIE_SECURE=1` 打开（本地 http 不能开）。
-- `app/auth.py` 提供：`before_app_request` 钩子把当前用户放进 `g.user`（未登录为 None）、`login_required` 装饰器、`get_current_user()`。
+- `app/auth.py` 提供：`load_logged_in_user()`（在 `create_app` 内以 `app.before_request` 注册，等价于 `before_app_request`）把当前用户放进 `g.user`（未登录为 None）、`login_required` 装饰器、`get_current_user()`、`safe_next_target()` 与内存限流。
 - **除静态资源、`auth.login`、`auth.register`、404 页外，所有视图都必须登录**；未登录访问 → 302 `/login?next=<原路径>`，登录成功回跳 `next`（**仅接受站内相对路径**，以 `/` 开头且不以 `//` 开头，否则回首页）。
 - 已登录访问 `/login`、`/register` → 302 首页。
 - 密码：`werkzeug.security.generate_password_hash` / `check_password_hash`；最短 8 位，不得与用户名相同；原始密码不入库、不写日志。

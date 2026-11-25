@@ -16,8 +16,26 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# baseline 迁移应当建出来的 5 张业务表（SPEC 第 3 节 v1 现状）
-BUSINESS_TABLES = {"categories", "products", "shopping_lists", "shopping_items", "expenses"}
+# 迁移到 head 应当建出来的业务表：v1 基线 5 张 + v2 的 users（#14 引入）
+BUSINESS_TABLES = {
+    "categories",
+    "products",
+    "shopping_lists",
+    "shopping_items",
+    "expenses",
+    "users",
+}
+
+# users 表的列（SPEC 第 3 节）：防止只把表名加进期望集合、迁移却漏了列
+USERS_COLUMNS = {
+    "id",
+    "username",
+    "password_hash",
+    "display_name",
+    "is_active",
+    "last_login_at",
+    "created_at",
+}
 
 # init-db 的示例数据规模（app/utils.py seed_sample_data / README 快速开始）
 SEED_COUNTS = {
@@ -26,6 +44,7 @@ SEED_COUNTS = {
     "shopping_lists": 1,
     "shopping_items": 3,
     "expenses": 6,
+    "users": 0,  # 种子数据不造用户；首个用户由注册流程产生
 }
 
 
@@ -93,6 +112,12 @@ def _head(db_path: Path) -> str:
     return heads[0].split()[0]
 
 
+def _columns(db_path: Path, table: str) -> set[str]:
+    """读一张表的列名（PRAGMA table_info）。"""
+    with sqlite3.connect(db_path) as conn:
+        return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
 def _counts(db_path: Path) -> dict[str, int]:
     with sqlite3.connect(db_path) as conn:
         return {
@@ -102,7 +127,7 @@ def _counts(db_path: Path) -> dict[str, int]:
 
 
 def test_db_upgrade_creates_five_tables_and_stamps_head(tmp_path):
-    """(a) 空库执行 db upgrade：5 张表齐全，alembic_version 等于 head，db current 显示 head。"""
+    """(a) 空库执行 db upgrade：v1 五张表 + v2 的 users 齐全，alembic_version 等于 head。"""
     db_path = tmp_path / "upgrade.db"
 
     _flask(db_path, "db", "upgrade")
@@ -138,3 +163,13 @@ def test_upgrade_after_init_db_is_noop(tmp_path):
     assert "Running upgrade" not in (result.stdout + result.stderr)
     assert _tables(db_path) == tables_before
     assert _counts(db_path) == counts_before
+
+
+def test_db_upgrade_creates_users_table_with_expected_columns(tmp_path):
+    """(d) upgrade 到 head 后 users 表存在，列与 SPEC 第 3 节一致（防只加表名不加列）。"""
+    db_path = tmp_path / "users.db"
+
+    _flask(db_path, "db", "upgrade")
+
+    assert "users" in _tables(db_path)
+    assert _columns(db_path, "users") == USERS_COLUMNS
