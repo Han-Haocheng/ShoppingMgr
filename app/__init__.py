@@ -91,10 +91,15 @@ def _register_cli(app: Flask) -> None:
     @app.cli.command("init-db")
     def init_db_command() -> None:
         """重建表结构并写入示例数据。"""
+        from flask_migrate import stamp
+
         from .utils import seed_sample_data
 
         db.drop_all()
         db.create_all()
+        # create_all 不走迁移脚本，建完必须把库标记到迁移 head（SPEC 第 10 节），
+        # 否则后续 flask db upgrade 会重放 baseline 并在「表已存在」上失败。
+        stamp()
         stats = seed_sample_data()
         if stats["created"]:
             click.echo(
