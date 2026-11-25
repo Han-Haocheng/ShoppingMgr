@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}注册 · ShoppingMgr{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-sm-8 col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h5 mb-3">注册</h1>
+        <form method="post" action="{{ url_for('auth.register') }}" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label" for="username">用户名</label>
+            <input class="form-control" id="username" name="username" type="text"
+                   value="{{ request.form.get('username', '') }}"
+                   autocomplete="username" maxlength="60" required autofocus>
+            <div class="form-text">登录用，最长 60 个字符，全站唯一。</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="display_name">显示名称</label>
+            <input class="form-control" id="display_name" name="display_name" type="text"
+                   value="{{ request.form.get('display_name', '') }}"
+                   autocomplete="nickname" maxlength="60">
+            <div class="form-text">可留空，留空时导航栏显示用户名。</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="password">密码</label>
+            <input class="form-control" id="password" name="password" type="password"
+                   autocomplete="new-password" minlength="8" required>
+            <div class="form-text">至少 8 位，且不能与用户名相同。</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="password2">确认密码</label>
+            <input class="form-control" id="password2" name="password2" type="password"
+                   autocomplete="new-password" minlength="8" required>
+          </div>
+          <button class="btn btn-primary w-100" type="submit">注册</button>
+        </form>
+        <p class="text-muted small mt-3 mb-0">已有账号？<a href="{{ url_for('auth.login') }}">登录</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

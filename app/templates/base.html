@@ -18,6 +18,25 @@
       <li class="nav-item"><a class="nav-link{% if request.blueprint == 'lists' %} active{% endif %}" href="{{ url_for('lists.list') }}">购物清单</a></li>
       <li class="nav-item"><a class="nav-link{% if request.blueprint == 'expenses' %} active{% endif %}" href="{{ url_for('expenses.list') }}">消费记录</a></li>
     </ul>
+    {# 右侧用户区（SPEC 第 7 节）：已登录显示昵称或用户名 + 登出表单，未登录显示登录/注册 #}
+    {% if g.user %}
+    <ul class="navbar-nav flex-row align-items-center">
+      <li class="nav-item">
+        <span class="navbar-text me-3">{{ g.user.display_name or g.user.username }}</span>
+      </li>
+      <li class="nav-item">
+        <form method="post" action="{{ url_for('auth.logout') }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-outline-light btn-sm" type="submit">登出</button>
+        </form>
+      </li>
+    </ul>
+    {% else %}
+    <ul class="navbar-nav flex-row align-items-center">
+      <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.login') }}">登录</a></li>
+      <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.register') }}">注册</a></li>
+    </ul>
+    {% endif %}
   </div>
 </nav>
 

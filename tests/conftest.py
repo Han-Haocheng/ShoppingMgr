@@ -33,3 +33,61 @@ def app():
 def client(app):
     """Flask 测试客户端。"""
     return app.test_client()
+
+# ---------------------------------------------------------------- 认证夹具（#14 追加）
+# 仅追加，不改上面的既有 fixture 与既有用例（SPEC 第 11 节）。
+
+AUTH_PASSWORD = "password123"
+AUTH_USERNAME = "alice"
+SECOND_USERNAME = "bob"
+
+
+def _seed_user(application, username, password=AUTH_PASSWORD, display_name="", is_active=True) -> int:
+    """在应用上下文里建一个用户并返回 id（同名已存在则复用）。"""
+    from werkzeug.security import generate_password_hash
+
+    from app.models import User
+
+    with application.app_context():
+        existing = User.query.filter_by(username=username).first()
+        if existing is not None:
+            return existing.id
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            display_name=display_name,
+            is_active=is_active,
+        )
+        _db.session.add(user)
+        _db.session.commit()
+        return user.id
+
+
+def _sign_in(client, username, password=AUTH_PASSWORD):
+    """用测试客户端走一次真实登录 POST（不跟随跳转）。"""
+    return client.post(
+        "/login",
+        data={"username": username, "password": password},
+        follow_redirects=False,
+    )
+
+
+@pytest.fixture()
+def auth_client(app):
+    """已登录客户端：用户 alice（SPEC 第 11 节）。"""
+    client = app.test_client()
+    _seed_user(app, AUTH_USERNAME)
+    response = _sign_in(client, AUTH_USERNAME)
+    assert response.status_code == 302, f"登录失败：{response.status_code}"
+    return client
+
+
+@pytest.fixture()
+def second_client(app):
+    """第二个用户的已登录客户端：用户 bob（SPEC 第 11 节，供归属隔离用例使用）。"""
+    client = app.test_client()
+    _seed_user(app, SECOND_USERNAME)
+    response = _sign_in(client, SECOND_USERNAME)
+    assert response.status_code == 302, f"登录失败：{response.status_code}"
+    return client
+

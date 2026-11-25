@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 # 项目根目录（/mnt/d/Project/ShoppingMgr）
@@ -67,3 +68,13 @@ class Config:
     # 即项目根下的 instance/shop.db（SPEC 第 1 节）。
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///shop.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # ---- 会话（SPEC 第 4 节）：登录成功会写 session.permanent，有效期以此为准
+    PERMANENT_SESSION_LIFETIME = timedelta(days=7)
+    # Lax：跨站 POST 不带 cookie，同站导航仍然带，兼顾 CSRF 与正常跳转
+    SESSION_COOKIE_SAMESITE = "Lax"
+    # 本地 http 必须关闭（否则浏览器不回传 cookie）；部署到 https 时用
+    # 环境变量 SESSION_COOKIE_SECURE=1 打开，与 SECRET_KEY 一样只在 import 期读一次。
+    SESSION_COOKIE_SECURE = (
+        os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower() in _TRUE_VALUES
+    )
