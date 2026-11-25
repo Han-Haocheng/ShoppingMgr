@@ -5,7 +5,7 @@
 买菜/囤货场景的单用户记账 + 购物清单小工具。Flask 服务端渲染，中文界面，数据落在本地
 SQLite。后端按 `SPEC.md` 实现；SPEC 是唯一权威契约，本文件只描述怎么跑。
 
-## 快速开始（五步）
+## 快速开始（六步）
 
 ```bash
 # 1. 建虚拟环境（Python 3.14）
@@ -16,14 +16,18 @@ source .venv/bin/activate
 pip install -r requirements.txt
 pip install -r requirements-dev.txt      # 只跑测试才需要（pytest）
 
-export FLASK_DEBUG=1
-# 3. 建库并写入示例数据（5 品类 / 8 商品 / 1 草稿清单 3 条目 / 6 笔本月消费）
+# 3. 配置 .env（至少要填 SECRET_KEY，否则下面的命令会直接报「未设置 SECRET_KEY」）
+cp .env.example .env
+python -c "import secrets;print(secrets.token_hex(32))"   # 把输出的 64 位十六进制填进 .env 的 SECRET_KEY=
+# 不想现在配密钥也行：export FLASK_DEBUG=1，将退回固定开发密钥并打一条警告
+
+# 4. 建库并写入示例数据（5 品类 / 8 商品 / 1 草稿清单 3 条目 / 6 笔本月消费）
 flask --app run:app init-db
 
-# 4. 启动开发服务器
+# 5. 启动开发服务器（会自动读取项目根目录的 .env）
 python run.py                            # http://127.0.0.1:5000
 
-# 5. 跑测试
+# 6. 跑测试
 python -m pytest -q
 ```
 
@@ -71,14 +75,26 @@ flask --app run:app db upgrade
 
 ### 本地跑 flask 命令要先给 SECRET_KEY
 
-`create_app()` 在非调试模式下要求 `SECRET_KEY`，缺失会直接启动失败。本地临时执行
-CLI（如 `db heads` / `db upgrade`）时：
+`create_app()` 在非调试模式下要求 `SECRET_KEY`，缺失会直接启动失败。`python run.py` 与
+`flask --app run:app ...` 都依赖同一份配置：只要按「快速开始」第 3 步建好项目根的 `.env`
+（`cp .env.example .env` 并填 `SECRET_KEY`），下面的命令直接就能跑：
 
 ```bash
+.venv/bin/flask --app run:app db heads
+.venv/bin/flask --app run:app db upgrade
+```
+
+没有 `.env`（或临时换一台机器）时，两条等价出路任选其一：
+
+```bash
+# 出路一：命令行临时给一个密钥
 SECRET_KEY=dev .venv/bin/flask --app run:app db heads
-# 或者开调试模式：会自动生成仅限本地的开发用 key
+# 出路二：开调试模式，用固定的开发密钥（会打一条警告）
 FLASK_DEBUG=1 .venv/bin/flask --app run:app db upgrade
 ```
+
+- `.env` 只在**当前工作目录及其上级**里查找，所以请在项目根目录执行命令。
+- `.env` 不会覆盖已经存在的环境变量（不 `override`），shell `export` 与 CI 的变量始终优先。
 
 ## 目录说明
 
@@ -110,7 +126,8 @@ ShoppingMgr/
 │   ├── test_auth.py        注册/登录/登出/限流/next 校验
 │   ├── test_csrf.py        CSRF 拦截与放行
 │   ├── test_migrations.py  init-db 与 db upgrade/downgrade 行为
-│   └── test_isolation.py   归属隔离：跨用户一律 404、未登录一律 302 /login
+│   ├── test_isolation.py   归属隔离：跨用户一律 404、未登录一律 302 /login
+│   └── test_run_env.py     run.py 读 .env：子进程真实启动，含「缺 SECRET_KEY 仍拒绝启动」
 └── instance/shop.db        运行时生成，不提交
 ```
 
@@ -199,9 +216,10 @@ fork 成员与 AI 编码代理的硬约束（含无写权限时的 fork 流程�
 cp .env.example .env    # .env 已被 .gitignore 忽略，不要提交
 ```
 
-- `flask --app run:app run` 与 `flask --app run:app init-db` 会自动加载项目根目录的 `.env`（依赖 `python-dotenv`），因此建库前也需先有 `SECRET_KEY` 或设 `FLASK_DEBUG=1`。
-- 直接 `python run.py` 不读 `.env`，请先 `export SECRET_KEY=...` 或 source 该文件。
+- `python run.py` 与 `flask --app run:app ...` 都会在导入应用前自动加载 `.env`（`python-dotenv`）：从**当前工作目录及其上级**找 `.env`，所以在项目根目录执行最稳。
+- `.env` 不覆盖已存在的环境变量（没有用 `override=True`），shell `export` 与 CI 注入的变量始终优先。
 - 报错文案本身给了两条出路：配置真实密钥，或本地开发时设 `FLASK_DEBUG=1`（会使用固定开发密钥并打警告）。
+
 ## 数据库迁移
 
 表结构用 Alembic（Flask-Migrate）管理，脚本在 `migrations/versions/`，基线是 v1 现状的 5 张表。
