@@ -128,3 +128,9 @@ fork 成员与 AI 编码代理的硬约束（含无写权限时的 fork 流程�
 - 不提交 `instance/`、`.venv/`、`.env`、`__pycache__`；契约改动先改 `SPEC.md` 再改代码。
 
 [![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+
+## 许可证
+
+本项目以 [MIT 协议](LICENSE) 发布，Copyright (c) 2026 Han-Haocheng。提交 PR 即表示你同意以同一协议授权你的贡献。
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
