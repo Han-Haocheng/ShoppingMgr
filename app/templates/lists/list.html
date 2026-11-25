@@ -33,6 +33,7 @@
           <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lists.detail', lid=it.id) }}">查看</a>
           <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lists.edit', lid=it.id) }}">编辑</a>
           <form class="d-inline" method="post" action="{{ url_for('lists.delete', lid=it.id) }}" onsubmit="return confirm('确认删除该清单及其全部条目？');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-outline-danger">删除</button>
           </form>
         </td>

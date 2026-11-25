@@ -15,6 +15,7 @@ class TestConfig:
     SECRET_KEY = "test-secret-key"
     SQLALCHEMY_DATABASE_URI = "sqlite://"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    WTF_CSRF_ENABLED = False  # 冒烟用例不处理 token；CSRF 行为由 tests/test_csrf.py 单独验
 
 
 @pytest.fixture()
