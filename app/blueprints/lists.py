@@ -6,8 +6,8 @@ from decimal import Decimal
 
 from flask import (
     Blueprint,
-    abort,
     flash,
+    g,
     redirect,
     render_template,
     request,
@@ -15,9 +15,10 @@ from flask import (
 )
 from sqlalchemy import case, func
 
+from ..auth import login_required
 from ..extensions import db
 from ..models import Product, ShoppingItem, ShoppingList
-from ..utils import copy_instance, parse_decimal, parse_id
+from ..utils import copy_instance, owned_or_404, parse_decimal, parse_id
 
 bp = Blueprint("lists", __name__)
 
@@ -34,10 +35,17 @@ def _validate(name: str, note: str) -> list[str]:
 
 
 def _products() -> list[Product]:
-    return db.session.query(Product).order_by(Product.name.asc()).all()
+    """条目下拉框用：只列当前用户的商品。"""
+    return (
+        db.session.query(Product)
+        .filter(Product.user_id == g.user.id)
+        .order_by(Product.name.asc())
+        .all()
+    )
 
 
 @bp.get("/lists")
+@login_required
 def list():
     """列表页；item_count / done_count 用一次 outer join + group_by 聚合，避免 N+1。"""
     rows = (
@@ -49,6 +57,7 @@ def list():
             ),
         )
         .outerjoin(ShoppingItem, ShoppingItem.list_id == ShoppingList.id)
+        .filter(ShoppingList.user_id == g.user.id)
         .group_by(ShoppingList.id)
         .order_by(ShoppingList.created_at.desc(), ShoppingList.id.desc())
         .all()
@@ -62,6 +71,7 @@ def list():
 
 
 @bp.route("/lists/new", methods=["GET", "POST"])
+@login_required
 def new():
     action_url = url_for("lists.new")
     if request.method == "POST":
@@ -76,7 +86,9 @@ def new():
                 action_url=action_url,
                 submit_label="新建清单",
             )
-        shopping_list = ShoppingList(name=name, note=note, status="draft")
+        shopping_list = ShoppingList(
+            name=name, note=note, status="draft", user_id=g.user.id
+        )
         db.session.add(shopping_list)
         db.session.commit()
         flash(f"清单“{name}”已创建。", "success")
@@ -90,8 +102,9 @@ def new():
 
 
 @bp.get("/lists/<int:lid>")
+@login_required
 def detail(lid: int):
-    shopping_list = db.get_or_404(ShoppingList, lid)
+    shopping_list = owned_or_404(ShoppingList, id=lid)
     return render_template(
         "lists/detail.html",
         obj=shopping_list,
@@ -101,8 +114,9 @@ def detail(lid: int):
 
 
 @bp.route("/lists/<int:lid>/edit", methods=["GET", "POST"])
+@login_required
 def edit(lid: int):
-    shopping_list = db.get_or_404(ShoppingList, lid)
+    shopping_list = owned_or_404(ShoppingList, id=lid)
     action_url = url_for("lists.edit", lid=lid)
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -130,8 +144,9 @@ def edit(lid: int):
 
 
 @bp.post("/lists/<int:lid>/items")
+@login_required
 def add_item(lid: int):
-    shopping_list = db.get_or_404(ShoppingList, lid)
+    shopping_list = owned_or_404(ShoppingList, id=lid)
     form = request.form
     errors: list[str] = []
 
@@ -140,7 +155,13 @@ def add_item(lid: int):
     except ValueError as exc:
         errors.append(f"商品无效：{exc}")
         product_id = None
-    product = db.session.get(Product, product_id) if product_id else None
+    product = (
+        db.session.query(Product)
+        .filter(Product.id == product_id, Product.user_id == g.user.id)
+        .first()
+        if product_id
+        else None
+    )
     if product_id is not None and product is None:
         errors.append("所选商品不存在")
         product_id = None
@@ -176,6 +197,7 @@ def add_item(lid: int):
         return redirect(url_for("lists.detail", lid=shopping_list.id))
 
     item = ShoppingItem(
+        user_id=g.user.id,
         list_id=shopping_list.id,
         product_id=product_id,
         name=name,
@@ -190,11 +212,11 @@ def add_item(lid: int):
 
 
 @bp.post("/lists/<int:lid>/items/<int:iid>/toggle")
+@login_required
 def toggle_item(lid: int, iid: int):
-    shopping_list = db.get_or_404(ShoppingList, lid)
-    item = db.get_or_404(ShoppingItem, iid)
-    if item.list_id != shopping_list.id:
-        abort(404)
+    shopping_list = owned_or_404(ShoppingList, id=lid)
+    # 条目必须同属本用户且确实挂在这张清单下，否则按不存在处理
+    item = owned_or_404(ShoppingItem, id=iid, list_id=shopping_list.id)
     item.done = not item.done
     db.session.commit()
     flash(f"条目“{item.name}”已{'勾选' if item.done else '取消勾选'}。", "success")
@@ -202,9 +224,10 @@ def toggle_item(lid: int, iid: int):
 
 
 @bp.post("/items/<int:iid>/delete")
+@login_required
 def delete_item(iid: int):
     """endpoint 属于 lists 蓝图（SPEC 第 4 节），路径为 /items/<iid>/delete。"""
-    item = db.get_or_404(ShoppingItem, iid)
+    item = owned_or_404(ShoppingItem, id=iid)
     list_id = item.list_id
     name = item.name
     db.session.delete(item)
@@ -214,14 +237,21 @@ def delete_item(iid: int):
     back = (request.form.get("back") or request.args.get("back") or "").strip()
     if back == "list":
         return redirect(url_for("lists.list"))
-    if list_id is not None and db.session.get(ShoppingList, list_id) is not None:
-        return redirect(url_for("lists.detail", lid=list_id))
+    if list_id is not None:
+        still_there = (
+            db.session.query(ShoppingList.id)
+            .filter(ShoppingList.id == list_id, ShoppingList.user_id == g.user.id)
+            .first()
+        )
+        if still_there is not None:
+            return redirect(url_for("lists.detail", lid=list_id))
     return redirect(url_for("lists.list"))
 
 
 @bp.post("/lists/<int:lid>/done")
+@login_required
 def mark_done(lid: int):
-    shopping_list = db.get_or_404(ShoppingList, lid)
+    shopping_list = owned_or_404(ShoppingList, id=lid)
     shopping_list.status = "done"
     db.session.commit()
     flash(f"清单“{shopping_list.name}”已标记完成。", "success")
@@ -229,8 +259,9 @@ def mark_done(lid: int):
 
 
 @bp.post("/lists/<int:lid>/delete")
+@login_required
 def delete(lid: int):
-    shopping_list = db.get_or_404(ShoppingList, lid)
+    shopping_list = owned_or_404(ShoppingList, id=lid)
     name = shopping_list.name
     db.session.delete(shopping_list)  # items 由 cascade='all, delete-orphan' 级联
     db.session.commit()

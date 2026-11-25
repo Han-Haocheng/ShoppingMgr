@@ -8,6 +8,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
+from flask import g
+
 from .extensions import db
 
 TWO_PLACES = Decimal("0.01")
@@ -104,6 +106,19 @@ def parse_month(raw, default_to_current: bool = True) -> str | None:
     return parsed.strftime(MONTH_FORMAT)
 
 
+# ---------------------------------------------------------------- 归属过滤
+
+
+def owned_or_404(model, **criteria):
+    """按 id + 当前用户取对象；不存在或不属于当前用户一律 404（SPEC 第 5 节）。
+
+    跨用户访问按「不存在」处理，返回 404 而不是 403，避免泄露资源是否存在。
+    所有按主键取业务对象的视图都必须走这里（等价于
+    `filter_by(id=..., user_id=g.user.id).first_or_404()`）。
+    """
+    return db.session.query(model).filter_by(user_id=g.user.id, **criteria).first_or_404()
+
+
 # ---------------------------------------------------------------- 月份 / 展示
 
 
@@ -137,20 +152,45 @@ def copy_instance(obj, **values):
 # ---------------------------------------------------------------- 示例数据
 
 
-def sample_data_exists() -> bool:
-    """库里是否已有品类数据（seed-db 防重复插入用）。"""
+# 本地演示账号（README「首次使用」已注明：仅本地演示用，上线前必须删除或改密）
+DEMO_USERNAME = "demo"
+DEMO_PASSWORD = "demo1234"
+DEMO_DISPLAY_NAME = "演示用户"
+
+
+def ensure_demo_user():
+    """确保演示账号存在并返回它；种子数据全部归属到该用户。"""
+    from .models import User
+
+    user = db.session.query(User).filter_by(username=DEMO_USERNAME).first()
+    if user is not None:
+        return user
+    user = User(username=DEMO_USERNAME, display_name=DEMO_DISPLAY_NAME)
+    user.set_password(DEMO_PASSWORD)  # 只存哈希，原始密码不落库
+    db.session.add(user)
+    db.session.commit()
+    return user
+
+
+def sample_data_exists(user_id: int) -> bool:
+    """该用户名下是否已有品类数据（seed-db 防重复插入用，按用户隔离）。"""
     from .models import Category
 
-    return db.session.query(Category.id).limit(1).first() is not None
+    return (
+        db.session.query(Category.id).filter_by(user_id=user_id).limit(1).first()
+        is not None
+    )
 
 
 def seed_sample_data() -> dict:
-    """写入示例数据：5 品类 / 8 商品 / 1 草稿清单（3 条目）/ 6 笔本月消费。"""
+    """写入示例数据（全部归属 demo 用户）：5 品类 / 8 商品 / 1 草稿清单（3 条目）/ 6 笔本月消费。"""
     from .models import Category, Expense, Product, ShoppingItem, ShoppingList
 
-    if sample_data_exists():
+    user = ensure_demo_user()
+    if sample_data_exists(user.id):
         return {
             "created": False,
+            "username": user.username,
             "categories": 0,
             "products": 0,
             "lists": 0,
@@ -166,7 +206,7 @@ def seed_sample_data() -> dict:
         ("乳饮", "牛奶酸奶"),
         ("个护", "个人护理"),
     ):
-        category = Category(name=name, note=note)
+        category = Category(name=name, note=note, user_id=user.id)
         db.session.add(category)
         categories[name] = category
     db.session.flush()
@@ -183,11 +223,12 @@ def seed_sample_data() -> dict:
         ("酸奶", "乳饮", "杯", Decimal("4.20")),
     ):
         product = Product(
+            user_id=user.id,
             name=name,
             category_id=categories[category_name].id,
             unit=unit,
             price=price,
-            barcode="",
+            barcode=None,  # 空条码存 NULL：(user_id, barcode) 唯一约束才不会撞车
             note="",
             is_active=True,
         )
@@ -195,7 +236,9 @@ def seed_sample_data() -> dict:
         products[name] = product
     db.session.flush()
 
-    shopping_list = ShoppingList(name="本周采购", note="草稿示例清单", status="draft")
+    shopping_list = ShoppingList(
+        user_id=user.id, name="本周采购", note="草稿示例清单", status="draft"
+    )
     db.session.add(shopping_list)
     db.session.flush()
 
@@ -207,6 +250,7 @@ def seed_sample_data() -> dict:
     for name, qty, unit_price in item_seed:
         db.session.add(
             ShoppingItem(
+                user_id=user.id,
                 list_id=shopping_list.id,
                 product_id=products[name].id,
                 name=name,
@@ -228,6 +272,7 @@ def seed_sample_data() -> dict:
     for product_name, category_name, amount, day_offset, note in expense_seed:
         db.session.add(
             Expense(
+                user_id=user.id,
                 spent_on=first_day + timedelta(days=day_offset),
                 amount=amount,
                 category_id=categories[category_name].id,
@@ -239,6 +284,7 @@ def seed_sample_data() -> dict:
     db.session.commit()
     return {
         "created": True,
+        "username": user.username,
         "categories": len(categories),
         "products": len(products),
         "lists": 1,

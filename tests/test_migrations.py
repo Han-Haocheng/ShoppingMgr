@@ -38,14 +38,24 @@ USERS_COLUMNS = {
 }
 
 # init-db 的示例数据规模（app/utils.py seed_sample_data / README 快速开始）
+# users=1：init-db 先建 demo 用户（#15 起种子数据全部归属它），再灌 5 张业务表
 SEED_COUNTS = {
     "categories": 5,
     "products": 8,
     "shopping_lists": 1,
     "shopping_items": 3,
     "expenses": 6,
-    "users": 0,  # 种子数据不造用户；首个用户由注册流程产生
+    "users": 1,
 }
+
+# #15 起 5 张业务表都要有 user_id（SPEC 第 3、10 节）
+USER_ID_TABLES = (
+    "categories",
+    "products",
+    "shopping_lists",
+    "shopping_items",
+    "expenses",
+)
 
 
 def _env(db_path: Path) -> dict[str, str]:
@@ -118,6 +128,54 @@ def _columns(db_path: Path, table: str) -> set[str]:
         return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
 
 
+def _user_id(db_path: Path, username: str) -> int:
+    """按用户名取 id（init-admin 建出来的归属用户）。"""
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id FROM users WHERE username = ?", (username,)
+        ).fetchone()
+    assert row is not None, f"users 表里没有 {username}"
+    return int(row[0])
+
+
+def _user_ids(db_path: Path, table: str) -> list[int]:
+    """一张表里所有行的 user_id（按 id 排序）。"""
+    with sqlite3.connect(db_path) as conn:
+        return [
+            int(row[0])
+            for row in conn.execute(f"SELECT user_id FROM {table} ORDER BY id")
+        ]
+
+
+def _insert_v1_rows(db_path: Path) -> None:
+    """往 v1 库塞一套最小业务数据：5 张表各一行（模拟上线前的存量数据）。"""
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO categories (name, note, created_at)"
+            " VALUES ('蔬果', '生鲜', '2026-11-01 00:00:00')"
+        )
+        conn.execute(
+            "INSERT INTO products (name, category_id, unit, price, barcode, note,"
+            " is_active, created_at)"
+            " VALUES ('苹果', 1, '件', 6.5, '', '', 1, '2026-11-01 00:00:00')"
+        )
+        conn.execute(
+            "INSERT INTO shopping_lists (name, note, status, created_at)"
+            " VALUES ('本周采购', '', 'draft', '2026-11-01 00:00:00')"
+        )
+        conn.execute(
+            "INSERT INTO shopping_items (list_id, product_id, name, qty, unit_price,"
+            " done, created_at)"
+            " VALUES (1, 1, '苹果', 2, 6.5, 0, '2026-11-01 00:00:00')"
+        )
+        conn.execute(
+            "INSERT INTO expenses (spent_on, amount, category_id, product_id, note,"
+            " created_at)"
+            " VALUES ('2026-11-02', 13.0, 1, 1, '', '2026-11-01 00:00:00')"
+        )
+        conn.commit()
+
+
 def _counts(db_path: Path) -> dict[str, int]:
     with sqlite3.connect(db_path) as conn:
         return {
@@ -133,6 +191,9 @@ def test_db_upgrade_creates_five_tables_and_stamps_head(tmp_path):
     _flask(db_path, "db", "upgrade")
 
     assert _tables(db_path) - {"alembic_version"} == BUSINESS_TABLES
+    # 期望集合之外再逐表确认 user_id 真的建出来了（防止只加表名不加列）
+    for table in USER_ID_TABLES:
+        assert "user_id" in _columns(db_path, table), f"{table} 缺 user_id 列"
     head = _head(db_path)
     assert _stamped_version(db_path) == head
 
@@ -173,3 +234,67 @@ def test_db_upgrade_creates_users_table_with_expected_columns(tmp_path):
 
     assert "users" in _tables(db_path)
     assert _columns(db_path, "users") == USERS_COLUMNS
+
+
+def test_user_id_columns_are_not_null_and_indexed(tmp_path):
+    """(e) user_id 必须 NOT NULL 且有索引（SPEC 第 3 节），barcode 放开为可空。"""
+    db_path = tmp_path / "user-id-schema.db"
+
+    _flask(db_path, "db", "upgrade")
+
+    for table in USER_ID_TABLES:
+        with sqlite3.connect(db_path) as conn:
+            info = {row[1]: row[3] for row in conn.execute(f"PRAGMA table_info({table})")}
+            indexes = {row[1] for row in conn.execute(f"PRAGMA index_list({table})")}
+        assert info.get("user_id") == 1, f"{table}.user_id 应为 NOT NULL"
+        assert f"ix_{table}_user_id" in indexes, f"{table} 缺 user_id 索引"
+    with sqlite3.connect(db_path) as conn:
+        barcode = {
+            row[1]: row[3] for row in conn.execute("PRAGMA table_info(products)")
+        }
+    assert barcode.get("barcode") == 0, "products.barcode 应为可空"
+
+
+def test_legacy_v1_rows_are_backfilled_to_first_user(tmp_path):
+    """(f) v1 库插数据 + 建用户 → upgrade 到 head：user_id 全部回填到该用户。"""
+    db_path = tmp_path / "legacy.db"
+    _flask(db_path, "db", "upgrade", "b4ed9413adcc")  # v1 基线
+    _insert_v1_rows(db_path)
+    _flask(db_path, "db", "upgrade", "0554acb803f0")  # 先补上 users 表（#14）
+    _flask(
+        db_path,
+        "init-admin",
+        "--username",
+        "legacy",
+        "--password",
+        "legacy1234",
+        "--display-name",
+        "老用户",
+    )
+
+    _flask(db_path, "db", "upgrade")  # 到 head：加 user_id + 回填
+
+    assert _stamped_version(db_path) == _head(db_path)
+    owner = _user_id(db_path, "legacy")
+    assert owner > 0
+    for table in USER_ID_TABLES:
+        assert _user_ids(db_path, table) == [owner], f"{table} 未回填到唯一用户"
+    # barcode 的空串在回填时归一为 NULL（否则唯一约束撞车）
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT barcode FROM products").fetchone()[0] is None
+
+
+def test_upgrade_with_rows_but_no_user_fails_with_init_admin_hint(tmp_path):
+    """(g) 有存量数据但 users 为空：迁移直接失败并提示先 init-admin，且不留半成品。"""
+    db_path = tmp_path / "no-user.db"
+    _flask(db_path, "db", "upgrade", "b4ed9413adcc")
+    _insert_v1_rows(db_path)
+    _flask(db_path, "db", "upgrade", "0554acb803f0")  # users 表已建但没人
+
+    result = _run(db_path, "db", "upgrade")
+
+    assert result.returncode != 0, "users 为空时迁移必须失败"
+    output = result.stdout + result.stderr
+    assert "init-admin" in output, f"报错没给修复命令：\n{output}"
+    assert "user_id" not in _columns(db_path, "categories"), "失败前不应留下半成品"
+    assert _stamped_version(db_path) == "0554acb803f0"

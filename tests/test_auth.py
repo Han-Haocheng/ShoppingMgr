@@ -247,11 +247,18 @@ def test_logout_clears_session(auth_client):
 
 
 def test_forged_session_for_missing_user_is_ignored(app, client):
-    """会话里指向不存在的用户：按未登录处理，不抛错。"""
+    """会话里指向不存在的用户：按未登录处理并送去登录页，不抛错、不渲染首页。
+
+    #15 起 / 需要登录，所以断言从「200 首页」改为「302 → /login」；
+    「伪造 user_id 不生效」的语义不变，并且额外证明没有渲染首页正文。
+    """
     with client.session_transaction() as sess:
         sess["user_id"] = 424242
     response = client.get("/")
-    assert response.status_code == 200
+    assert response.status_code == 302
+    assert response.headers["Location"].startswith("/login"), response.headers["Location"]
+    assert response.status_code != 200
+    assert "本月" not in response.get_data(as_text=True)
     with client.session_transaction() as sess:
         assert "user_id" not in sess
 
@@ -364,8 +371,19 @@ def test_nav_shows_current_user_and_logout(auth_client):
 
 
 def test_nav_shows_login_links_for_anonymous(client):
-    """未登录时导航右侧是登录/注册链接。"""
-    html = _text(client.get("/"))
+    """未登录：(a) 首页被送去登录页；(b) 登录页导航里有登录/注册入口。
+
+    #15 起匿名拿不到首页正文，登录/注册入口只剩登录页可见，所以拆成两条断言；
+    语义等价且更强（多验了未登录被拦下这一层）。
+    """
+    home = client.get("/")
+    assert home.status_code == 302
+    assert home.headers["Location"].startswith("/login?next="), home.headers["Location"]
+
+    page = client.get("/login")
+    assert page.status_code == 200
+    html = _text(page)
     assert 'href="/login"' in html
     assert 'href="/register"' in html
+    assert "登录" in html and "注册" in html
 
