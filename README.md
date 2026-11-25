@@ -154,4 +154,20 @@ cp .env.example .env    # .env 已被 .gitignore 忽略，不要提交
 - `flask --app run:app run` 与 `flask --app run:app init-db` 会自动加载项目根目录的 `.env`（依赖 `python-dotenv`），因此建库前也需先有 `SECRET_KEY` 或设 `FLASK_DEBUG=1`。
 - 直接 `python run.py` 不读 `.env`，请先 `export SECRET_KEY=...` 或 source 该文件。
 - 报错文案本身给了两条出路：配置真实密钥，或本地开发时设 `FLASK_DEBUG=1`（会使用固定开发密钥并打警告）。
+## 数据库迁移
+
+表结构用 Alembic（Flask-Migrate）管理，脚本在 `migrations/versions/`，基线是 v1 现状的 5 张表。
+日常三条命令：
+
+```bash
+flask --app run:app db upgrade            # 升级到最新版本（已有库/生产库的唯一升级方式）
+flask --app run:app db migrate -m '说明'   # 改完 app/models.py 后生成迁移脚本，人工检查后再提交
+flask --app run:app db current            # 看当前库的版本，应显示 <revision> (head)
+```
+
+- `init-db` 是**开发重置**：drop_all + create_all + 示例数据，并把库 stamp 到 head（**会清空数据**）。
+- 生产环境**只用 `db upgrade`**，不要执行 `init-db`：它重建表，等于清库。
+- 早已存在但还没有 `alembic_version` 表的旧库（baseline 之前建的），先 `flask --app run:app db stamp head`
+  把它标记为基线，再走 `db upgrade`；直接 upgrade 会因为「表已存在」失败。
+
 
