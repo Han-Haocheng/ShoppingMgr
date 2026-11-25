@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block title %}首页 · ShoppingMgr{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">首页</h1>
+  <span class="text-muted small">本月</span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 text-muted">本月消费</h2>
+        <p class="display-6 money mb-1">¥ {{ '%.2f'|format(month_total) }}</p>
+        <p class="text-muted mb-0">共 {{ month_count }} 笔</p>
+        <a class="btn btn-sm btn-outline-primary mt-3" href="{{ url_for('expenses.list') }}">查看消费记录</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 text-muted">进行中的清单</h2>
+        <p class="display-6 mb-1">{{ active_lists|length }}</p>
+        <p class="text-muted mb-0">草稿状态的购物清单</p>
+        <a class="btn btn-sm btn-outline-primary mt-3" href="{{ url_for('lists.list') }}">查看购物清单</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 text-muted">快捷入口</h2>
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-sm btn-primary" href="{{ url_for('expenses.new') }}">记一笔消费</a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lists.new') }}">新建清单</a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('products.new') }}">新建商品</a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('categories.new') }}">新建品类</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>最近消费</span>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('expenses.list') }}">全部</a>
+  </div>
+  <div class="card-body p-0">
+    {% if recent_expenses %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead>
+          <tr><th>日期</th><th>品类</th><th>备注</th><th class="money">金额</th></tr>
+        </thead>
+        <tbody>
+          {% for e in recent_expenses %}
+          <tr>
+            <td class="text-nowrap">{{ e.spent_on.isoformat() if e.spent_on else '—' }}</td>
+            <td>{{ e.category.name if e.category else '—' }}</td>
+            <td class="text-muted">{{ e.note or '—' }}</td>
+            <td class="money">¥ {{ '%.2f'|format(e.amount) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state mb-0">暂无记录</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>进行中的购物清单</span>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lists.list') }}">全部</a>
+  </div>
+  <div class="card-body p-0">
+    {% if active_lists %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead>
+          <tr><th>名称</th><th>条目</th><th class="money">合计</th><th class="text-end">操作</th></tr>
+        </thead>
+        <tbody>
+          {% for l in active_lists %}
+          <tr>
+            <td>{{ l.name }}</td>
+            <td>{{ l.items|length }} 条</td>
+            <td class="money">¥ {{ '%.2f'|format(l.total) }}</td>
+            <td class="text-end text-nowrap">
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lists.detail', lid=l.id) }}">查看</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state mb-0">暂无进行中的清单</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

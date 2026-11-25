@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}品类 · ShoppingMgr{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">品类</h1>
+  <a class="btn btn-primary" href="{{ url_for('categories.new') }}">新建品类</a>
+</div>
+
+{% if items %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle bg-white shadow-sm">
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>备注</th>
+        <th class="money">商品数</th>
+        <th>创建时间</th>
+        <th class="text-end">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td>{{ it.name }}</td>
+        <td class="text-muted">{{ it.note or '—' }}</td>
+        <td class="money">{{ it.product_count }}</td>
+        <td class="text-nowrap text-muted">{{ it.created_at.strftime('%Y-%m-%d') if it.created_at else '—' }}</td>
+        <td class="text-end text-nowrap">
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('categories.edit', cid=it.id) }}">编辑</a>
+          <form class="d-inline" method="post" action="{{ url_for('categories.delete', cid=it.id) }}" onsubmit="return confirm('确认删除该品类？其下商品将保留但不再归类。');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-state">暂无记录</p>
+<div class="text-center"><a class="btn btn-primary" href="{{ url_for('categories.new') }}">新建品类</a></div>
+{% endif %}
+{% endblock %}

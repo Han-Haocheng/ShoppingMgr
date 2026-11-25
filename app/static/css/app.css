@@ -1,0 +1,36 @@
+/* ShoppingMgr 自定义样式：仅在 Bootstrap 之上做少量覆盖 */
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 表格紧凑 */
+.table-sm > :not(caption) > * > * {
+  padding: 0.4rem 0.5rem;
+}
+
+/* 金额列右对齐、等宽数字 */
+.money,
+.text-end.money {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 空态居中 */
+.empty-state {
+  padding: 2.5rem 1rem;
+  margin-bottom: 1rem;
+  text-align: center;
+  color: #6c757d;
+  border: 1px dashed #dee2e6;
+  border-radius: 0.5rem;
+  background-color: #fff;
+}
+.empty-state.mb-0 {
+  margin-bottom: 0;
+}
+
+/* 已购条目删除线（行内文字） */
+.text-decoration-line-through td {
+  text-decoration: line-through;
+}

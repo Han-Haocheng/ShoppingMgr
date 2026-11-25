@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}消费记录 · ShoppingMgr{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">消费记录</h1>
+  <a class="btn btn-primary" href="{{ url_for('expenses.new') }}">记一笔</a>
+</div>
+
+<form class="row row-cols-lg-auto g-2 align-items-center mb-3" method="get" action="{{ url_for('expenses.list') }}">
+  <div class="col-12">
+    <label class="visually-hidden" for="filter-month">月份</label>
+    <select class="form-select" id="filter-month" name="month">
+      <option value="">全部月份</option>
+      {% for m in months %}
+      <option value="{{ m }}"{% if month == m %} selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-12">
+    <button class="btn btn-outline-secondary" type="submit">筛选</button>
+    {% if month %}
+    <a class="btn btn-link" href="{{ url_for('expenses.list') }}">清除筛选</a>
+    {% endif %}
+  </div>
+  <div class="col-12 ms-lg-auto">
+    <span class="text-muted">当前{% if month %} {{ month }}{% endif %}合计：</span>
+    <span class="money fw-bold">¥ {{ '%.2f'|format(month_total) }}</span>
+  </div>
+</form>
+
+{% if items %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle bg-white shadow-sm">
+    <thead>
+      <tr>
+        <th>日期</th>
+        <th>品类</th>
+        <th>商品</th>
+        <th>备注</th>
+        <th class="money">金额</th>
+        <th class="text-end">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in items %}
+      <tr>
+        <td class="text-nowrap">{{ e.spent_on.isoformat() if e.spent_on else '—' }}</td>
+        <td>{{ e.category.name if e.category else '—' }}</td>
+        <td>{{ e.product.name if e.product else '—' }}</td>
+        <td class="text-muted">{{ e.note or '—' }}</td>
+        <td class="money">¥ {{ '%.2f'|format(e.amount) }}</td>
+        <td class="text-end text-nowrap">
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('expenses.edit', eid=e.id) }}">编辑</a>
+          <form class="d-inline" method="post" action="{{ url_for('expenses.delete', eid=e.id) }}" onsubmit="return confirm('确认删除该条消费记录？');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-state">暂无记录</p>
+<div class="text-center"><a class="btn btn-primary" href="{{ url_for('expenses.new') }}">记一笔</a></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}页面不存在 · ShoppingMgr{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+  <p class="display-4 mb-2">404</p>
+  <h1 class="h5 mb-3">页面不存在</h1>
+  <p class="text-muted">你访问的地址没有对应的内容，可能已被删除或输入有误。</p>
+  <a class="btn btn-primary" href="{{ url_for('main.index') }}">返回首页</a>
+</div>
+{% endblock %}

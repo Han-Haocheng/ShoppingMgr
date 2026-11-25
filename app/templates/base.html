@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ShoppingMgr 购物管家{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand navbar-dark bg-dark">
+  <div class="container flex-nowrap">
+    <a class="navbar-brand me-3" href="{{ url_for('main.index') }}">ShoppingMgr</a>
+    <ul class="navbar-nav flex-row flex-wrap me-auto">
+      <li class="nav-item"><a class="nav-link{% if request.blueprint == 'main' %} active{% endif %}" href="{{ url_for('main.index') }}">首页</a></li>
+      <li class="nav-item"><a class="nav-link{% if request.blueprint == 'categories' %} active{% endif %}" href="{{ url_for('categories.list') }}">品类</a></li>
+      <li class="nav-item"><a class="nav-link{% if request.blueprint == 'products' %} active{% endif %}" href="{{ url_for('products.list') }}">商品</a></li>
+      <li class="nav-item"><a class="nav-link{% if request.blueprint == 'lists' %} active{% endif %}" href="{{ url_for('lists.list') }}">购物清单</a></li>
+      <li class="nav-item"><a class="nav-link{% if request.blueprint == 'expenses' %} active{% endif %}" href="{{ url_for('expenses.list') }}">消费记录</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main class="container my-4">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{% if category == 'success' %}success{% elif category == 'danger' %}danger{% else %}secondary{% endif %}" role="alert">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="container text-center text-muted small pb-4">ShoppingMgr · 单用户本地购物记录</footer>
+</body>
+</html>

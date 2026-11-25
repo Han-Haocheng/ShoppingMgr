@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}购物清单 · ShoppingMgr{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">购物清单</h1>
+  <a class="btn btn-primary" href="{{ url_for('lists.new') }}">新建清单</a>
+</div>
+
+{% if items %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle bg-white shadow-sm">
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>状态</th>
+        <th class="money">条目数</th>
+        <th class="money">已购</th>
+        <th>创建时间</th>
+        <th class="text-end">操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td><a href="{{ url_for('lists.detail', lid=it.id) }}">{{ it.name }}</a></td>
+        <td>
+          {% if it.status == 'done' %}<span class="badge text-bg-success">已完成</span>{% else %}<span class="badge text-bg-secondary">草稿</span>{% endif %}
+        </td>
+        <td class="money">{{ it.item_count }}</td>
+        <td class="money">{{ it.done_count }}</td>
+        <td class="text-nowrap text-muted">{{ it.created_at.strftime('%Y-%m-%d') if it.created_at else '—' }}</td>
+        <td class="text-end text-nowrap">
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lists.detail', lid=it.id) }}">查看</a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lists.edit', lid=it.id) }}">编辑</a>
+          <form class="d-inline" method="post" action="{{ url_for('lists.delete', lid=it.id) }}" onsubmit="return confirm('确认删除该清单及其全部条目？');">
+            <button type="submit" class="btn btn-sm btn-outline-danger">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="empty-state">暂无记录</p>
+<div class="text-center"><a class="btn btn-primary" href="{{ url_for('lists.new') }}">新建清单</a></div>
+{% endif %}
+{% endblock %}

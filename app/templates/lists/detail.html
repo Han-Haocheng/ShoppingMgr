@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}{{ obj.name }} · 购物清单 · ShoppingMgr{% endblock %}
+{% block content %}
+<nav aria-label="面包屑" class="mb-2">
+  <ol class="breadcrumb mb-0 small">
+    <li class="breadcrumb-item"><a href="{{ url_for('lists.list') }}">购物清单</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ obj.name }}</li>
+  </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div>
+    <h1 class="h4 mb-1">
+      {{ obj.name }}
+      {% if obj.status == 'done' %}<span class="badge text-bg-success align-middle">已完成</span>{% else %}<span class="badge text-bg-secondary align-middle">草稿</span>{% endif %}
+    </h1>
+    {% if obj.note %}<p class="text-muted mb-0 small">{{ obj.note }}</p>{% endif %}
+  </div>
+  <div class="text-end">
+    <p class="h4 money mb-1">¥ {{ '%.2f'|format(total) }}</p>
+    <div class="d-flex flex-wrap gap-2 justify-content-end">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lists.edit', lid=obj.id) }}">编辑清单</a>
+      {% if obj.status != 'done' %}
+      <form method="post" action="{{ url_for('lists.mark_done', lid=obj.id) }}" onsubmit="return confirm('确认将该清单标记为已完成？');">
+        <button type="submit" class="btn btn-sm btn-success">标记完成</button>
+      </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('lists.delete', lid=obj.id) }}" onsubmit="return confirm('确认删除该清单及其全部条目？');">
+        <button type="submit" class="btn btn-sm btn-outline-danger">删除清单</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>清单条目</span>
+    <span class="text-muted small">共 {{ obj.items|length }} 项，已购 {{ obj.items|selectattr('done')|list|length }} 项</span>
+  </div>
+  <div class="card-body p-0">
+    {% if obj.items %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>名称</th>
+            <th>数量</th>
+            <th class="money">单价</th>
+            <th class="money">小计</th>
+            <th>状态</th>
+            <th class="text-end">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for i in obj.items %}
+          <tr{% if i.done %} class="text-decoration-line-through text-muted"{% endif %}>
+            <td>
+              {{ i.name }}
+              {% if i.product %}<span class="text-muted small">（{{ i.product.name }}）</span>{% endif %}
+            </td>
+            <td>{{ '%.2f'|format(i.qty) }}</td>
+            <td class="money">¥ {{ '%.2f'|format(i.unit_price) }}</td>
+            <td class="money">¥ {{ '%.2f'|format(i.subtotal) }}</td>
+            <td>{% if i.done %}<span class="badge text-bg-success">已购</span>{% else %}<span class="badge text-bg-light border">待购</span>{% endif %}</td>
+            <td class="text-end text-nowrap">
+              <form class="d-inline" method="post" action="{{ url_for('lists.toggle_item', lid=obj.id, iid=i.id) }}">
+                <button type="submit" class="btn btn-sm btn-outline-primary">{% if i.done %}撤销已购{% else %}标记已购{% endif %}</button>
+              </form>
+              <form class="d-inline" method="post" action="{{ url_for('lists.delete_item', iid=i.id) }}" onsubmit="return confirm('确认删除该条目？');">
+                <input type="hidden" name="back" value="detail">
+                <button type="submit" class="btn btn-sm btn-outline-danger">删除</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state mb-0">暂无记录</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header">添加条目</div>
+  <div class="card-body">
+    <form method="post" action="{{ url_for('lists.add_item', lid=obj.id) }}">
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="product_id">关联商品</label>
+          <select class="form-select" id="product_id" name="product_id">
+            <option value="">不关联（手工填写）</option>
+            {% for p in products %}
+            <option value="{{ p.id }}">{{ p.name }}（{{ p.unit }} · ¥ {{ '%.2f'|format(p.price) }}）</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="item-name">名称 <span class="text-danger">*</span></label>
+          <input class="form-control" type="text" id="item-name" name="name" maxlength="80" required>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label" for="qty">数量</label>
+          <input class="form-control" type="number" step="0.01" min="0" id="qty" name="qty" value="1">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label" for="unit_price">单价（元）</label>
+          <input class="form-control text-end money" type="number" step="0.01" min="0" id="unit_price" name="unit_price" value="0.00">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary mt-3">添加条目</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
